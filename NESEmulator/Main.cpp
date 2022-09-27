@@ -23,10 +23,11 @@ int main(int argc, char* args[])
 	//RenderingWindow patternTablewindow{};
 	PPU ppu(&nesRenderer);
 	NES_Memory_System memory{&ppu};
+	ppu.SetMemorySystem(&memory);
 	MasterClock masterClock(&ppu);
 	
 	NESCPU cpu{ &memory , &masterClock};
-	NESROMLoader::LoadRomFile(R"(C:\Users\Josh\source\NESEmulator\Roms\DonkeyKong.nes)", &memory);
+	NESROMLoader::LoadRomFile(R"(C:\Users\Josh\source\NESEmulator\Roms\nestest.nes)", &memory);
 
 	NEStestloader nestestloader;
 	nestestloader.Init();

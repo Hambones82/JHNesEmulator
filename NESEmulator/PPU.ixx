@@ -90,13 +90,38 @@ private:
 		//fetch color from master pallette
 		//return color
 		//return retval;
-		int x_index = (col / 4)%8;
-		int y_index = (col / 4) & 0x78;
-		int index = (x_index + y_index);
-		return MasterPallette[index];
+		int tile_x = col / 8;
+		int tile_y = row / 8;
+		int tile_id = tile_x + (tile_y * 32);
+		//identifies a tile in the pattern table
+		uint8_t tile_num = ReadAddr(0x2000 + tile_id);
+
+		uint8_t tile_num_row = tile_num / 16;
+		uint8_t tile_num_col = tile_num % 16;
+
+		uint16_t fetch_address = (tile_num_row << 8) + (tile_num_col << 4) + (row % 8);
+		uint16_t fetch_address_1 = fetch_address + 8;
+
+		uint8_t plane_1_byte = ReadAddr(fetch_address);
+		uint8_t plane_2_byte = ReadAddr(fetch_address_1);
+		uint8_t ored_byte = plane_1_byte | plane_2_byte;
+
+		//std::cout << "ored byte: " << std::dec << (int)ored_byte << "\n";
+
+		uint8_t color_y_n = ored_byte & (1 << (8 - (col % 8)));
+		
+		if (color_y_n == 0) {
+			return Color(0, 0, 0);
+		}
+		else {
+			//std::cout << "color is not black" << test_ctr++ << "\n";
+			return Color(255, 255, 255);
+		}
+
+		//return MasterPallette[tile_num % 64];
 		
 	}
-
+	int test_ctr = 0;
 public:
 	void Tick() {
 		//std::cout << "row: " << row << "col: " << col << "\n";
@@ -129,6 +154,9 @@ public:
 	PPU(RenderingWindow *in_renderOut) {
 		renderOut = in_renderOut;
 	}
+	void SetMemorySystem(NES_Memory_System* in_memory_system) {
+		memory_system = in_memory_system;
+	}
 
 	uint8_t ReadReg(uint8_t reg_num) {
 		if (reg_num < 8) {
@@ -142,16 +170,20 @@ public:
 
 	void WriteReg(uint8_t reg_num, uint8_t value) {
 		if (reg_num == 6) {
+			//std::cout << "writing reg address: " << (int)value << "\n";
 			if (address_latch == false) {
-				PPUAddr.bytes[0] = value;
+				PPUAddr.bytes[1] = value;
 				address_latch = true;
 			}
 			else {
-				PPUAddr.bytes[1] = value;
+				PPUAddr.bytes[0] = value;
+				address_latch = false;
 			}
 		}
 		else if (reg_num == 7) {
 			WriteAddr(PPUAddr.address, value);
+			PPUAddr.address++; //increment based on 0x2000
+			PPUAddr.address = PPUAddr.address % 0x4000;
 		}
 		else if (reg_num < 8) {
 			PPUregs.bytes[reg_num] = value;

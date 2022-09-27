@@ -81,6 +81,8 @@ private:
 
 	void WriteRawPPUAddr(uint16_t address, uint8_t value) {
 		if ((address >= 0x2000) && (address < 0x3000)) {
+
+			//std::cout << "writing to vram\n";
 			//write to vram
 			//donkey kong has horizontal mirroring
 			//2000 = 2400 -- nt1
