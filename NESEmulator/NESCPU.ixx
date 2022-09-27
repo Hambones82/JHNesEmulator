@@ -22,6 +22,7 @@ private:
 	static const uint16_t NMI_vector = 0xFFFA;
 	static const uint16_t BRK_IRQ_vector = 0xFFFE;
 	static const uint16_t NMI_IRQ_vector = 0xFFFA;
+	static const uint16_t RESET_vector = 0xFFFC;
 
 	static const uint16_t aModeMask = 0x1c;
 
@@ -80,6 +81,8 @@ struct {
 	uint8_t P; // flags
 }regs;
 
+bool reset = false;
+
 void tick() {
 	cycle+=3;
 	test_cycle = (test_cycle + 3) % 341;
@@ -88,15 +91,17 @@ void tick() {
 	masterClock->MasterClockTick();
 	masterClock->MasterClockTick();
 }
-
+int last_cycle = 0;
 void NMI() {
+	std::cout << "nmi. pc: " << std::hex << regs.PC << " cycles since nmi : " << cycle - last_cycle << "\n";
 	SetFlag(flag_interrupt_disable, 1);
 	uint16_t return_addr = regs.PC;
 	StackPushWord(return_addr);
 	StackPush(regs.P | 0x04);
 	regs.PC = memory_System->FetchWord(NMI_IRQ_vector);
 	tick();
-	//std::cout << "nmi\n";
+	
+	last_cycle = cycle;
 }
 
 static consteval bool MatchesPattern(uint16_t value, uint16_t mask, uint16_t pattern) {
@@ -730,13 +735,18 @@ NESCPU(NES_Memory_System *in_memory, MasterClock *in_MasterClock) {
 		regs.Y = 0;
 		regs.P = 0x24;
 		regs.S = 0xFD;
-		regs.PC = 0xC000;
+		regs.PC = 0x0000;
 		memory_System = in_memory;
 		masterClock = in_MasterClock;
+		reset = true;
 	}
 
 void AdvanceExecution() {
-	if (memory_System->GetNMI()) {
+	if (reset) {
+		regs.PC = memory_System->FetchWord(RESET_vector);
+		reset = false;
+	}
+	else if (memory_System->GetNMI()) {
 		NMI();
 		}
 	else {

@@ -28,6 +28,9 @@ export class NES_Memory_System
 private:
 	PPU* ppu;
 	std::array<uint8_t, 65536> RAM = { 0 };
+	std::array<uint8_t, 1024> NameTable1 = { 0 };
+	std::array<uint8_t, 1024> NameTable2 = { 0 };
+	std::array<uint8_t, 0x20> PPU_Pallette_RAM = { 0 };
 	std::array<uint16_t, banks_in_addr_space> page_table; //provides base addresses
 														  //usage: page_table[page_num] --> base addr.
 
@@ -48,7 +51,9 @@ private:
 			return RAM[address];
 		}
 		else if (address >= 0x2000 && address < 0x4000) {
-			return ppu->ReadReg(address & 0x0007);
+			uint8_t read_val = ppu->ReadReg(address & 0x0007);
+			//std::cout << "reading: " << address << "val: " << (int)read_val << "\n";
+			return read_val;
 		}
 		else {
 			return PRGROM.ReadROM(address);
@@ -56,10 +61,43 @@ private:
 	}
 
 	uint8_t ReadRawPPUAddr(uint16_t address) {
-		if (address >= 0 && address < 0x2000) {
+		if ((address >= 0) && (address < 0x2000)) {
 			return CHRROM.ReadROM(address);
 		}
+		else if ((address >= 0x2000) && (address < 0x3000)) {
+			uint16_t array_address = address & 0x03FF;
+			if ((address & 0x2000) > 0) {
+				return NameTable1[array_address];
+			}
+			else {
+				return NameTable2[array_address];
+			}
+		}
+		else if ((address >= 0x3F00) && (address < 0x4000)) {
+			return PPU_Pallette_RAM[(address & 0x1F)];
+		}
 		else return 0;
+	}
+
+	void WriteRawPPUAddr(uint16_t address, uint8_t value) {
+		if ((address >= 0x2000) && (address < 0x3000)) {
+			//write to vram
+			//donkey kong has horizontal mirroring
+			//2000 = 2400 -- nt1
+			//2800 = 2c00 -- nt2
+			//array address = address & 0x03FF
+			//this is wrong...
+			uint16_t array_address = address & 0x03FF;
+			if ((address & 0x2000) > 0) {
+				NameTable1[array_address] = value;
+			}
+			else {
+				NameTable2[array_address] = value;
+			}
+		}
+		else if ((address >= 0x3F00) && (address < 0x4000)) {
+			PPU_Pallette_RAM[(address & 0x1F)] = value;
+		}
 	}
 
 public:
@@ -97,6 +135,10 @@ public:
 	
 	uint8_t FetchPPUByte(uint16_t address) {
 		return ReadRawPPUAddr(address);
+	}
+
+	void WritePPUByte(uint16_t address, uint8_t value) {
+		WriteRawPPUAddr(address, value);
 	}
 
 	void LoadPRGBank(std::vector<uint8_t> &in_Bank, int bank_num) {
