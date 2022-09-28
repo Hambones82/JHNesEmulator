@@ -93,13 +93,17 @@ private:
 		int tile_x = col / 8;
 		int tile_y = row / 8;
 		int tile_id = tile_x + (tile_y * 32);
-		//identifies a tile in the pattern table
-		uint8_t tile_num = ReadAddr(0x2000 + tile_id);
+
+		uint16_t tile_addr = 0x2000 + tile_id;
+		uint8_t tile_num = ReadAddr(tile_addr);
+
+		//std::cout << "tile num: " << (int)tile_num << "\n";
 
 		uint8_t tile_num_row = tile_num / 16;
 		uint8_t tile_num_col = tile_num % 16;
 
-		uint16_t fetch_address = (tile_num_row << 8) + (tile_num_col << 4) + (row % 8);
+		uint16_t tile_side = (uint16_t)(PPUregs.PPUFlags.PPUCTRL.Background_pattern_table_address) << 12;
+		uint16_t fetch_address = (tile_num_row << 8) + (tile_num_col << 4) + (row % 8) + tile_side;
 		uint16_t fetch_address_1 = fetch_address + 8;
 
 		uint8_t plane_1_byte = ReadAddr(fetch_address);
@@ -182,7 +186,7 @@ public:
 		}
 		else if (reg_num == 7) {
 			WriteAddr(PPUAddr.address, value);
-			PPUAddr.address++; //increment based on 0x2000
+			PPUAddr.address += (PPUregs.PPUFlags.PPUCTRL.VRAM_address_increment ? 32 : 1); //increment based on 0x2000
 			PPUAddr.address = PPUAddr.address % 0x4000;
 		}
 		else if (reg_num < 8) {

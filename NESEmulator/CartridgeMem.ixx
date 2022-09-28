@@ -6,7 +6,6 @@ export module CartridgeMem;
 
 export const uint16_t bank_size = 0x2000; //8KB
 
-
 export typedef std::array<uint8_t, bank_size> bank; //bank loaded from a file.  prg_rom are split across 2 of these.  
 
 export class CartridgeMem {

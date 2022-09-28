@@ -7,6 +7,7 @@
 #include<iomanip>
 
 import PPU;
+import NESIO;
 import CartridgeMem;
 export module NES_Memory_System;
 
@@ -27,6 +28,7 @@ export class NES_Memory_System
 {
 private:
 	PPU* ppu;
+	NESIO* nesIO;
 	std::array<uint8_t, 65536> RAM = { 0 };
 	std::array<uint8_t, 1024> NameTable1 = { 0 };
 	std::array<uint8_t, 1024> NameTable2 = { 0 };
@@ -41,6 +43,9 @@ private:
 		else if (address >= 0x2000 && address < 0x4000) {
 			ppu->WriteReg(address & 0x0007, data);
 		}
+		else if (address == 0x4016) {
+			nesIO->writeIOReg(IOReg::reg4016, data);//initialize controller input read
+		}
 		else {
 			PRGROM.WriteROM(address, data);
 		}
@@ -54,6 +59,12 @@ private:
 			uint8_t read_val = ppu->ReadReg(address & 0x0007);
 			//std::cout << "reading: " << address << "val: " << (int)read_val << "\n";
 			return read_val;
+		}
+		else if (address == 0x4016) {
+			return nesIO->readIOReg(IOReg::reg4016);
+		}
+		else if (address == 0x4016) {
+			//get input state
 		}
 		else {
 			return PRGROM.ReadROM(address);
@@ -106,8 +117,9 @@ public:
 	//ppu map, ppu fetch functions
 	//maybe we could start off with a pattern rom viewer.  that'd probably 
 	
-	NES_Memory_System(PPU* in_PPU) {
+	NES_Memory_System(PPU* in_PPU, NESIO* in_nesIO) {
 		ppu = in_PPU;
+		nesIO = in_nesIO;
 	}
 
 	bool GetNMI() {

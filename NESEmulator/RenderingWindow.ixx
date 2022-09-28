@@ -7,9 +7,12 @@ export class RenderingWindow {
 private:
 	SDL_Window* window;
 	SDL_Renderer* renderer;
-	SDL_Texture* renderTexture;
-	int window_width = 1024;
-	int window_height = 512;
+	SDL_Texture* renderTexture; 
+	int window_width = 256;
+	int window_height = 240;
+
+	int scale_factor = 4;//not performant...
+	//change to draw to surface/texture
 
 	const int clearR = 0;
 	const int clearG = 0;
@@ -20,14 +23,16 @@ public:
 		if (!SDL_WasInit(SDL_INIT_VIDEO)) {
 			SDL_Init(SDL_INIT_VIDEO);
 		}
-		SDL_CreateWindowAndRenderer(window_width, window_height, SDL_WINDOW_SHOWN, &window, &renderer);
+		SDL_CreateWindowAndRenderer(window_width * scale_factor, window_height * scale_factor, SDL_WINDOW_SHOWN, &window, &renderer);
+		renderTexture = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_RGB888, SDL_TEXTUREACCESS_STREAMING, window_width, window_height);
 	}
 	void StartFrame()
 	{
-		SDL_RenderClear(renderer);
+		
 	}
 	void EndFrame()
 	{	
+		SDL_RenderClear(renderer);
 		SDL_RenderPresent(renderer);
 	}
 	void SetColor(int r, int g, int b, int a)
@@ -37,7 +42,12 @@ public:
 	}
 	void DrawPixel(int x, int y)
 	{
-		SDL_RenderDrawPoint(renderer, x, y);
+		//this code isn't correct...
+		for (int l_x = 0; l_x < scale_factor; l_x++) {
+			for (int l_y = 0; l_y < scale_factor; l_y++) {
+				SDL_RenderDrawPoint(renderer, x * scale_factor + l_x, y * scale_factor + l_y); 
+			}
+		}
 	}
 
 	void ShutDown()

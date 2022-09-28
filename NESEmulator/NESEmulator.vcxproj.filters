@@ -57,5 +57,11 @@
     <ClCompile Include="PPU.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="NESIO.ixx">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="PlatformIO.ixx">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
 </Project>

@@ -5,6 +5,8 @@ import NESROMLoader;
 import nestestloader;
 import PPU;
 import MasterClock;
+import PlatformIO;
+import NESIO;
 
 #include <memory>
 #include <iostream>
@@ -22,7 +24,9 @@ int main(int argc, char* args[])
 	RenderingWindow nesRenderer{};
 	//RenderingWindow patternTablewindow{};
 	PPU ppu(&nesRenderer);
-	NES_Memory_System memory{&ppu};
+	PlatformIO platformIO;
+	NESIO nesIO{ &platformIO };
+	NES_Memory_System memory{&ppu, &nesIO};
 	ppu.SetMemorySystem(&memory);
 	MasterClock masterClock(&ppu);
 	
@@ -62,6 +66,7 @@ int main(int argc, char* args[])
 		SDL_Event event;
 		while (SDL_PollEvent(&event)) {  // poll until all events are handled!
 			// decide what to do with this event.
+			
 		}
 		cpu.AdvanceExecution();
 		// update game state, draw the current frame
