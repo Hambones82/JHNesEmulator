@@ -37,30 +37,6 @@ int main(int argc, char* args[])
 	nestestloader.Init();
 
 	int y_offset = 1;
-	/*
-	nesRenderer.StartFrame();
-	uint8_t tile_row;
-	uint8_t tile_col;
-	for (int side = 0; side < 2; side++) {
-		for (tile_row = 0; tile_row < 16; tile_row++) {
-			for (tile_col = 0; tile_col < 16; tile_col++) {
-				uint16_t tile_mask = (tile_row << 8) | (tile_col << 4);
-				for (int row = 0; row < 8; row++) {
-					uint8_t ored_byte = memory.FetchPPUByte(tile_mask + row + side * 0x1000) | memory.FetchPPUByte(tile_mask + row + 8 + side * 0x1000);
-					for (int col_offset = 0; col_offset < 8; col_offset++) {
-						int y = (tile_row << 3) + row + y_offset;
-						int x = (tile_col << 3) + (8 - col_offset);
-						int current_color = (ored_byte & (1 << col_offset)) >> col_offset;
-						nesRenderer.SetColor(current_color * 255, current_color * 255, current_color * 255, 0);
-						nesRenderer.DrawPixel(x + side * 128, y);
-					}
-				}
-			}
-		}
-	}
-	nesRenderer.EndFrame();
-	//do addresses 0 to FFF first
-	*/
 
 	while (true) {
 		SDL_Event event;

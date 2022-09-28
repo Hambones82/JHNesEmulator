@@ -11,12 +11,20 @@ private:
 	int window_width = 256;
 	int window_height = 240;
 
-	int scale_factor = 4;//not performant...
-	//change to draw to surface/texture
+	int scale_factor = 4;
 
 	const int clearR = 0;
 	const int clearG = 0;
 	const int clearB = 0;
+
+	int currentR = 0;
+	int currentG = 0;
+	int currentB = 0;
+
+	int32_t pitch = 0;
+	uint32_t* pixelBuffer = nullptr;
+
+	bool texture_locked = false;
 public:
 	RenderingWindow()
 	{
@@ -28,25 +36,38 @@ public:
 	}
 	void StartFrame()
 	{
-		
+		//std::cout << "starting frame\n";
+		SDL_LockTexture(renderTexture, NULL, (void**)&pixelBuffer, &pitch);
+		texture_locked = true;
+		pitch /= sizeof(int32_t);
 	}
 	void EndFrame()
 	{	
-		SDL_RenderClear(renderer);
+		//for (int i = 0; i < (10 * 10); i++) { //wtf???
+		//	std::cout << (int)pixelBuffer[i] << "\n";
+		//}
+		SDL_UnlockTexture(renderTexture);
+		texture_locked = false;
+		SDL_RenderCopy(renderer, renderTexture, NULL, NULL);
 		SDL_RenderPresent(renderer);
 	}
 	void SetColor(int r, int g, int b, int a)
 	{
-		//std::cout << r << g << b << "\n";
-		SDL_SetRenderDrawColor(renderer, r, g, b, a);
+		//if(r != 0) 
+			//std::cout << r << g << b << "\n";
+		currentR = r;
+		currentG = g;
+		currentB = b;
 	}
 	void DrawPixel(int x, int y)
 	{
-		//this code isn't correct...
-		for (int l_x = 0; l_x < scale_factor; l_x++) {
-			for (int l_y = 0; l_y < scale_factor; l_y++) {
-				SDL_RenderDrawPoint(renderer, x * scale_factor + l_x, y * scale_factor + l_y); 
-			}
+		//only getting yellow???
+		//std::cout << "trying to draw pixel\n";
+		uint32_t color = ((currentR << 16) + (currentG << 8) + (currentB));
+		//if (color != 0) std::cout << color << "\n";
+		if (texture_locked) {
+			//std::cout << "writing color: " << (int)color << "\n";
+			pixelBuffer[x + y * window_width] = color;
 		}
 	}
 

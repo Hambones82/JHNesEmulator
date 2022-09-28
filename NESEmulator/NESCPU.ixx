@@ -747,6 +747,7 @@ void AdvanceExecution() {
 		reset = false;
 	}
 	else if (memory_System->GetNMI()) {
+		//std::cout << "nmi\n";
 		NMI();
 		}
 	else {

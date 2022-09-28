@@ -133,21 +133,24 @@ public:
 		if (col >= max_col) {
 			col = 0;
 			row++;
-			if (row >= max_row) {
-				row = 0;
-			}
 		}
-		else if ((col < max_draw_col) && row < max_draw_row) {
+		if (row >= max_row) {
+			row = 0;
+		}
+		if ((col < max_draw_col) && row < max_draw_row) {
+			//std::cout << "drawing pixel";
 			auto color = GetColor(col, row);
 			renderOut->SetColor(color.r, color.g, color.b, 0);
 			renderOut->DrawPixel(col, row);
 		}
 		else if (row == 241 && col == 1) {
+			//std::cout << "ending frame\n";
 			PPUregs.PPUFlags.PPUSTATUS.vblank_started = 1;//flag of the 2002 register
 			renderOut->EndFrame();
 			frame++;
 		}
 		else if ((row == 261) && (col == 0)) {
+			//std::cout << "starting frame\n";
 			PPUregs.PPUFlags.PPUSTATUS.vblank_started = 0;//flag of the 2002 register
 			renderOut->StartFrame();
 		}
