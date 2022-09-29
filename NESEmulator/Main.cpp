@@ -31,7 +31,7 @@ int main(int argc, char* args[])
 	MasterClock masterClock(&ppu);
 	
 	NESCPU cpu{ &memory , &masterClock};
-	NESROMLoader::LoadRomFile(R"(C:\Users\Josh\source\NESEmulator\Roms\nestest.nes)", &memory);
+	NESROMLoader::LoadRomFile(R"(C:\Users\Josh\source\NESEmulator\Roms\MarioBros.nes)", &memory);
 
 	NEStestloader nestestloader;
 	nestestloader.Init();

@@ -11,7 +11,7 @@ private:
 	int window_width = 256;
 	int window_height = 240;
 
-	int scale_factor = 4;
+	float scale_factor = 3.5;
 
 	const int clearR = 0;
 	const int clearG = 0;
@@ -31,6 +31,7 @@ public:
 		if (!SDL_WasInit(SDL_INIT_VIDEO)) {
 			SDL_Init(SDL_INIT_VIDEO);
 		}
+		SDL_SetHint(SDL_HINT_RENDER_SCALE_QUALITY, "2");
 		SDL_CreateWindowAndRenderer(window_width * scale_factor, window_height * scale_factor, SDL_WINDOW_SHOWN, &window, &renderer);
 		renderTexture = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_RGB888, SDL_TEXTUREACCESS_STREAMING, window_width, window_height);
 	}

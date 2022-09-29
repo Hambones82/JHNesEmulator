@@ -54,9 +54,6 @@ private:
 		}PPUFlags;
 	}PPUregs;
 
-	
-
-
 	uint8_t ReadAddr(uint16_t address);
 	void WriteAddr(uint16_t address, uint8_t value);
 
@@ -80,16 +77,10 @@ private:
 	};
 
 	static const std::array<Color, 64> MasterPallette;
+	std::array<uint8_t, 32> pallette;
 
 	Color GetColor(int col, int row) {
 		
-		//fetch identifier for pattern byte
-		//fetch pattern byte
-		//fetch pallette id from nametable
-		//fetch color num from nametable
-		//fetch color from master pallette
-		//return color
-		//return retval;
 		int tile_x = col / 8;
 		int tile_y = row / 8;
 		int tile_id = tile_x + (tile_y * 32);
@@ -97,8 +88,19 @@ private:
 		uint16_t tile_addr = 0x2000 + tile_id;
 		uint8_t tile_num = ReadAddr(tile_addr);
 
-		//std::cout << "tile num: " << (int)tile_num << "\n";
+		uint8_t block_x = tile_x / 4;
+		uint8_t block_y = tile_y / 4;
 
+		uint8_t quad_index_x = (tile_x % 4) / 2;
+		uint8_t quad_index_y = (tile_y % 4) / 2;
+
+		uint16_t attr_addr = 0x23C0 + block_x + block_y * 8;
+		uint8_t attr_byte = ReadAddr(attr_addr); //covers 16 tiles... 4x4
+		uint8_t attr_byte_index = (quad_index_x % 2) + (quad_index_y % 2) * 2;
+		uint8_t attr_byte_mask = 0xC0 >> ((3-attr_byte_index)*2);
+
+		uint8_t attr = (attr_byte_mask & attr_byte) >> ((attr_byte_index)*2); //portion of lookup to pallette ram
+		
 		uint8_t tile_num_row = tile_num / 16;
 		uint8_t tile_num_col = tile_num % 16;
 
@@ -108,22 +110,17 @@ private:
 
 		uint8_t plane_1_byte = ReadAddr(fetch_address);
 		uint8_t plane_2_byte = ReadAddr(fetch_address_1);
-		uint8_t ored_byte = plane_1_byte | plane_2_byte;
-
-		//std::cout << "ored byte: " << std::dec << (int)ored_byte << "\n";
-
-		uint8_t color_y_n = ored_byte & (1 << (8 - (col % 8)));
 		
-		if (color_y_n == 0) {
-			return Color(0, 0, 0);
-		}
-		else {
-			//std::cout << "color is not black" << test_ctr++ << "\n";
-			return Color(255, 255, 255);
-		}
-
-		//return MasterPallette[tile_num % 64];
+		uint8_t bit_pos = (7 - (col % 8)); 
 		
+		uint8_t lsbit = (plane_1_byte & (1 << bit_pos)) >> bit_pos;
+		uint8_t msbit = (plane_2_byte & (1 << bit_pos)) >> bit_pos << 1;
+
+		uint16_t pallette_addr = (attr << 2) + lsbit + msbit;
+		
+		uint8_t pallette_index = ReadAddr(0x3F00 + pallette_addr);
+		Color retval = MasterPallette[pallette_index];
+		return retval;
 	}
 	int test_ctr = 0;
 public:
