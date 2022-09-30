@@ -225,8 +225,16 @@ inline uint16_t ReadWord(uint16_t address) {
 }
 
 inline void WriteByte(uint16_t address, uint8_t data) {
-	memory_System->StoreByte(address, data);
-	tick();
+	if (address == 0x4014) {// OAM
+		for (int i = 0; i < 256; i++) {
+			memory_System->OAMTransfer(((uint16_t)data << 8) + i);
+			tick();
+		}
+	}
+	else {
+		memory_System->StoreByte(address, data);
+		tick();
+	}
 }
 
 inline void WriteWord(uint16_t address, uint16_t data) {

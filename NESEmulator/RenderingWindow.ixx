@@ -1,5 +1,6 @@
 #include <SDL.h>
 #include <iostream>
+#include <SDL_ttf.h>
 
 export module RenderingWindow;
 
@@ -8,10 +9,14 @@ private:
 	SDL_Window* window;
 	SDL_Renderer* renderer;
 	SDL_Texture* renderTexture; 
+	//SDL_Texture* debugTexture;
+	//SDL_Surface* text_surface;
 	int window_width = 256;
 	int window_height = 240;
+	int screen_width = 256;
+	int screen_height = 240;
 
-	float scale_factor = 3.5;
+	float scale_factor = 2;
 
 	const int clearR = 0;
 	const int clearG = 0;
@@ -25,15 +30,25 @@ private:
 	uint32_t* pixelBuffer = nullptr;
 
 	bool texture_locked = false;
+	//TTF_Font* Debug_Font;
 public:
 	RenderingWindow()
 	{
+		/*
 		if (!SDL_WasInit(SDL_INIT_VIDEO)) {
 			SDL_Init(SDL_INIT_VIDEO);
 		}
+		TTF_Init();
+		Debug_Font = TTF_OpenFont(R"(C:\Users\Josh\source\Fonts\courier.ttf)", 24);
+		*/
+		//if (Debug_Font == NULL) std::cout << "error loading font\n";
+		//std::cout << TTF_GetError();
+		//text_surface = TTF_RenderUTF8_Solid(Debug_Font, "test", SDL_Color(255, 0, 255));
+		//debugTexture = SDL_CreateTextureFromSurface(renderer, text_surface);
 		SDL_SetHint(SDL_HINT_RENDER_SCALE_QUALITY, "2");
 		SDL_CreateWindowAndRenderer(window_width * scale_factor, window_height * scale_factor, SDL_WINDOW_SHOWN, &window, &renderer);
 		renderTexture = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_RGB888, SDL_TEXTUREACCESS_STREAMING, window_width, window_height);
+		//debugTexture = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_RGB888, SDL_TEXTUREACCESS_STREAMING, screen_width, screen_height);
 	}
 	void StartFrame()
 	{
@@ -41,6 +56,7 @@ public:
 		SDL_LockTexture(renderTexture, NULL, (void**)&pixelBuffer, &pitch);
 		texture_locked = true;
 		pitch /= sizeof(int32_t);
+		//std::cout << "start frame\n";
 	}
 	void EndFrame()
 	{	
@@ -50,7 +66,9 @@ public:
 		SDL_UnlockTexture(renderTexture);
 		texture_locked = false;
 		SDL_RenderCopy(renderer, renderTexture, NULL, NULL);
+		//SDL_RenderCopy(renderer, debugTexture, NULL, NULL);
 		SDL_RenderPresent(renderer);
+		//std::cout << "end frame\n";
 	}
 	void SetColor(int r, int g, int b, int a)
 	{

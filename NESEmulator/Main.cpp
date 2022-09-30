@@ -19,6 +19,7 @@ import NESIO;
 
 int main(int argc, char* args[])
 {
+	std::ios_base::sync_with_stdio(false);
 	SDL_Init(SDL_INIT_EVERYTHING);
 
 	RenderingWindow nesRenderer{};
@@ -31,7 +32,7 @@ int main(int argc, char* args[])
 	MasterClock masterClock(&ppu);
 	
 	NESCPU cpu{ &memory , &masterClock};
-	NESROMLoader::LoadRomFile(R"(C:\Users\Josh\source\NESEmulator\Roms\MarioBros.nes)", &memory);
+	NESROMLoader::LoadRomFile(R"(C:\Users\Josh\source\NESEmulator\Roms\DonkeyKong.nes)", &memory);
 
 	NEStestloader nestestloader;
 	nestestloader.Init();

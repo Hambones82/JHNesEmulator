@@ -43,6 +43,9 @@ private:
 		else if (address >= 0x2000 && address < 0x4000) {
 			ppu->WriteReg(address & 0x0007, data);
 		}
+		else if (address == 0x4014) {
+			//OAM DMA
+		}
 		else if (address == 0x4016) {
 			nesIO->writeIOReg(IOReg::reg4016, data);//initialize controller input read
 		}
@@ -123,7 +126,11 @@ public:
 	}
 
 	bool GetNMI() {
-		return ppu->GetNMI();
+		bool nmi = ppu->GetNMI();
+		//if (nmi) {
+		//	std::cout << GetRange(0x0200, 0x0100, 32);
+		//}
+		return nmi;
 	}
 
 	uint8_t FetchByte(uint16_t address)
@@ -190,5 +197,10 @@ public:
 		}
 		output = ss.str();
 		return output;
+	}
+	void OAMTransfer(uint16_t address) {
+		ppu->WriteOAM(address, RAM[address]);
+		//if(((address % 4) == 1) || ((address % 4) == 2))
+		//	std::cout << "dma transfer, address: " << address << "data: " << (int)RAM[address] << "\n";
 	}
 };
