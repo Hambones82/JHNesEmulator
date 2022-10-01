@@ -16,7 +16,7 @@ private:
 	int screen_width = 256;
 	int screen_height = 240;
 
-	float scale_factor = 2;
+	float scale_factor = 3;
 
 	const int clearR = 0;
 	const int clearG = 0;

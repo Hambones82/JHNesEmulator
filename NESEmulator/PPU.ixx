@@ -93,8 +93,11 @@ private:
 	Sprite current_row_sprites[8];
 	uint8_t current_row_sprite_counter;
 
+	bool bg_opaque = false;
+	bool sprite_0_hit = false;
+
 	Color GetColor(int col, int row) {
-		
+		bg_opaque = false;
 		int tile_x = col / 8;
 		int tile_y = row / 8;
 		int tile_id = tile_x + (tile_y * 32);
@@ -136,33 +139,43 @@ private:
 		uint8_t lsbit = (plane_1_byte & (1 << bit_pos)) >> bit_pos;
 		uint8_t msbit = (plane_2_byte & (1 << bit_pos)) >> bit_pos << 1;
 
-		uint16_t pallette_addr = (bg?0x3F00:0x3F10) + (attr << 2) + lsbit + msbit;
-		
+		if(bg) bg_opaque = (lsbit || msbit);
+		//if (bg_opaque) std::cout << "bg opaque";
+
+		if (!(lsbit | msbit) && !bg) return 0xFF; //if foreground and 00 index into pallette, return FF meaning transparent
+
+		uint16_t pallette_addr = (bg ? 0x3F00 : 0x3F10) + (attr << 2) + lsbit + msbit;
+
 		uint8_t pallette_index = ReadAddr(pallette_addr);
-		
+
 		return pallette_index;
 	}
 
+	int sprite_0_in_current_row = -1;
 	int test_ctr = 0;
 public:
 	void Tick() {
 		//std::cout << "row: " << row << "col: " << col << "\n";
 		col++;
-		
+
 		if (col >= max_col) {
 			col = 0;
 			row++;
 			current_row_sprite_counter = 0;
+			sprite_0_in_current_row = -1;
 			//evaluate sprites for current row
 			for (int i = 0; i < 64; i++) {
 				if (((OAM.sprites[i].y_pos) <= row) && ((OAM.sprites[i].y_pos) > (row - 8))) {
+					if (i == 0) { sprite_0_in_current_row = current_row_sprite_counter; }
+					//std::cout << "sprite 0 in current row " << sprite_0_in_current_row << " row: " << (int)row << "\n";
 					current_row_sprites[current_row_sprite_counter++] = OAM.sprites[i];
 					//std::cout << "sprite " << current_row_sprite_counter-1 << "tile num: " 
 					//	<< std::hex << (int)(current_row_sprites[i].tile_index) << "\n";
 					if (current_row_sprite_counter >= 8) break;
+					
 				}
 			}
-			
+
 			//for (int i = 0; i < current_row_sprite_counter; i++) {
 			//	std::cout << "sprite, row: " << row << "col: " << (int)(current_row_sprites[i].x_pos) << "\n";
 			//}
@@ -172,23 +185,40 @@ public:
 		}
 		if ((col < max_draw_col) && row < max_draw_row) {
 			//std::cout << "drawing pixel";
+
 			if (PPUregs.PPUFlags.MASK.Show_background) {
 				auto color = GetColor(col, row);
 				renderOut->SetColor(color.r, color.g, color.b, 0);
 				renderOut->DrawPixel(col, row);
+
 			}
 			for (int i = 0; i < current_row_sprite_counter; i++) {
-				if ((current_row_sprites[i].x_pos > col-8) && (current_row_sprites[i].x_pos <= col )) {
+				if ((current_row_sprites[i].x_pos > col - 8) &&
+					(current_row_sprites[i].x_pos <= col << (PPUregs.PPUFlags.PPUCTRL.Sprite_size ? 1 : 0))) {
 					uint8_t attr = current_row_sprites[i].attributes & 0x03;
-					//if(attr != 0) { //actually... not attr but ... index...
-						uint8_t tile_num = (current_row_sprites[i].tile_index); //bank? 0 or 1
-						uint8_t x_offset = (col - current_row_sprites[i].x_pos) % 8;
-						uint8_t y_offset = (row - current_row_sprites[i].y_pos) % 8;
-						uint8_t pallette_index = GetPalletteIndex(tile_num, y_offset, x_offset, attr, false, 0);
+					uint8_t tile_num = (current_row_sprites[i].tile_index); //bank? 0 or 1
+					uint8_t x_offset = ((col - current_row_sprites[i].x_pos) % 8);
+					if (current_row_sprites[i].attributes & 0b0100'0000) {
+						x_offset = 7 - x_offset;
+					}
+					uint8_t y_offset = (row - current_row_sprites[i].y_pos) % 8;
+					if (current_row_sprites[i].attributes & 0b1000'0000) {
+						y_offset = 7 - y_offset;
+					}
+					uint8_t side = PPUregs.PPUFlags.PPUCTRL.Sprite_size ?
+						current_row_sprites[i].tile_index & 1 :
+						PPUregs.PPUFlags.PPUCTRL.Sprite_pattern_table_address;
+					uint8_t pallette_index = GetPalletteIndex(tile_num, y_offset, x_offset, attr, false, side);
+					if (pallette_index != 0xFF) {
 						auto color = MasterPallette[pallette_index];
 						renderOut->SetColor(color.r, color.g, color.b, 0);
 						renderOut->DrawPixel(col, row);
-					//}
+						//std::cout << "sprite 0 in current row " << sprite_0_in_current_row << " row: " << (int)i << "\n";
+						if (bg_opaque && (sprite_0_in_current_row == i)) {
+							//std::cout << "bg_opaque";
+							sprite_0_hit = true;
+						}
+					}
 				}
 			}
 			//evaluate sprite, etc...
@@ -205,6 +235,10 @@ public:
 			std::cout << std::flush;
 			PPUregs.PPUFlags.PPUSTATUS.vblank_started = 1;//flag of the 2002 register
 			renderOut->EndFrame();
+			if (sprite_0_hit) {
+				std::cout << "sprite 0 hit\n";
+				PPUregs.PPUFlags.PPUSTATUS.sprite_0_hit = 1;
+			}
 			frame++;
 		}
 		else if ((row == 261) && (col == 0)) {
@@ -212,6 +246,11 @@ public:
 			PPUregs.PPUFlags.PPUSTATUS.vblank_started = 0;//flag of the 2002 register
 			renderOut->StartFrame();
 		}
+		else if ((row == 261) && (col == 1)) {
+			PPUregs.PPUFlags.PPUSTATUS.sprite_0_hit = 0;
+			sprite_0_hit = false;
+		}
+
 	}
 	void GetColor(uint8_t& out_r, uint8_t& out_g, uint8_t& out_b) {
 
@@ -223,12 +262,18 @@ public:
 		memory_system = in_memory_system;
 	}
 
+	uint8_t PPUReadBuffer = 0;
 	uint8_t ReadReg(uint8_t reg_num) {
-		if (reg_num < 8) {
-			return PPUregs.bytes[reg_num];
-		}
 		if (reg_num == 7) {
 			address_latch = false;
+			PPUReadBuffer = ReadAddr(PPUAddr.address);
+			return PPUReadBuffer;
+		}
+		if (reg_num == 4) {
+			return OAM.bytes[PPUregs.PPUFlags.OAMADDR];
+		}
+		else if (reg_num < 8) {
+			return PPUregs.bytes[reg_num];
 		}
 		else return 0;
 	}
