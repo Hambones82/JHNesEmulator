@@ -62,6 +62,10 @@ private:
 		uint8_t bytes[2];
 	}PPUAddr;
 
+	uint8_t PPU_scroll_x = 0;
+	uint8_t PPU_scroll_y = 0;
+	bool PPU_scroll_latch = false;
+
 	bool address_latch = false;
 
 	struct Color {
@@ -96,10 +100,14 @@ private:
 	bool bg_opaque = false;
 	bool sprite_0_hit = false;
 
-	Color GetColor(int col, int row) {
+	Color GetColor(int in_col, int in_row) {
+		int col_adjust = (PPUregs.PPUFlags.PPUCTRL.Base_nametable_address & 1) ? 256 : 0;
+		int row_adjust = (PPUregs.PPUFlags.PPUCTRL.Base_nametable_address & 2) ? 240 : 0;
+		int col = in_col + PPU_scroll_x + col_adjust;
+		int row = in_row + PPU_scroll_y + row_adjust;
 		bg_opaque = false;
-		int tile_x = col / 8;
-		int tile_y = row / 8;
+		int tile_x = (col) / 8;
+		int tile_y = (row) / 8 ;
 		int tile_id = tile_x + (tile_y * 32);
 		//if (PPUregs.PPUFlags.PPUCTRL.Base_nametable_address != 0) std::cout << "base nt addr != 0\n";
 		uint16_t base_nametable_address = 0x2000 + (PPUregs.PPUFlags.PPUCTRL.Base_nametable_address << 10);
@@ -129,7 +137,9 @@ private:
 
 		uint16_t tile_side = (uint16_t)(side_select) << 12;
 		uint16_t fetch_address = (tile_num_row << 8) + (tile_num_col << 4) + (row_offset) + tile_side;
+		fetch_address &= 0x3FFF; //??
 		uint16_t fetch_address_1 = fetch_address + 8;
+		fetch_address_1 &= 0x3FFF; //??
 
 		uint8_t plane_1_byte = ReadAddr(fetch_address);
 		uint8_t plane_2_byte = ReadAddr(fetch_address_1);
@@ -164,8 +174,9 @@ public:
 			current_row_sprite_counter = 0;
 			sprite_0_in_current_row = -1;
 			//evaluate sprites for current row
+			bool sprite_8x16 = PPUregs.PPUFlags.PPUCTRL.Sprite_size;
 			for (int i = 0; i < 64; i++) {
-				if (((OAM.sprites[i].y_pos) <= row) && ((OAM.sprites[i].y_pos) > (row - 8))) {
+				if (((OAM.sprites[i].y_pos) <= row) && ((OAM.sprites[i].y_pos) > (row - (sprite_8x16?15:8)))) {
 					if (i == 0) { sprite_0_in_current_row = current_row_sprite_counter; }
 					//std::cout << "sprite 0 in current row " << sprite_0_in_current_row << " row: " << (int)row << "\n";
 					current_row_sprites[current_row_sprite_counter++] = OAM.sprites[i];
@@ -192,11 +203,15 @@ public:
 				renderOut->DrawPixel(col, row);
 
 			}
+			bool sprite_8x16 = PPUregs.PPUFlags.PPUCTRL.Sprite_size;
 			for (int i = 0; i < current_row_sprite_counter; i++) {
 				if ((current_row_sprites[i].x_pos > col - 8) &&
-					(current_row_sprites[i].x_pos <= col << (PPUregs.PPUFlags.PPUCTRL.Sprite_size ? 1 : 0))) {
+					(current_row_sprites[i].x_pos <= col/* << (sprite_8x16 ? 1 : 0)*/)) {
 					uint8_t attr = current_row_sprites[i].attributes & 0x03;
-					uint8_t tile_num = (current_row_sprites[i].tile_index); //bank? 0 or 1
+					bool bottom_tile = (row - current_row_sprites[i].y_pos) >= 8;
+					uint8_t top_tile_num = current_row_sprites[i].tile_index;
+					uint8_t tile_num = (sprite_8x16 && bottom_tile)?top_tile_num+1:top_tile_num;
+
 					uint8_t x_offset = ((col - current_row_sprites[i].x_pos) % 8);
 					if (current_row_sprites[i].attributes & 0b0100'0000) {
 						x_offset = 7 - x_offset;
@@ -236,7 +251,7 @@ public:
 			PPUregs.PPUFlags.PPUSTATUS.vblank_started = 1;//flag of the 2002 register
 			renderOut->EndFrame();
 			if (sprite_0_hit) {
-				std::cout << "sprite 0 hit\n";
+				//std::cout << "sprite 0 hit\n";
 				PPUregs.PPUFlags.PPUSTATUS.sprite_0_hit = 1;
 			}
 			frame++;
@@ -266,6 +281,7 @@ public:
 	uint8_t ReadReg(uint8_t reg_num) {
 		if (reg_num == 7) {
 			address_latch = false;
+			PPU_scroll_latch = false;
 			PPUReadBuffer = ReadAddr(PPUAddr.address);
 			return PPUReadBuffer;
 		}
@@ -279,7 +295,16 @@ public:
 	}
 
 	void WriteReg(uint8_t reg_num, uint8_t value) {
-		if (reg_num == 6) {
+		if (reg_num == 5) {
+			if (PPU_scroll_latch) {
+				PPU_scroll_y = value;
+			}
+			else {
+				PPU_scroll_x = value;
+			}
+			PPU_scroll_latch = !PPU_scroll_latch;
+		}
+		else if (reg_num == 6) {
 			//std::cout << "writing reg address: " << (int)value << "\n";
 			if (address_latch == false) {
 				PPUAddr.bytes[1] = value;

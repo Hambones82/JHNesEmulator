@@ -19,10 +19,13 @@ const uint16_t offset_mask = 0x1FFF;
 const uint8_t address_shift_amount = 13;//conversion between base addr and base num
 
 export typedef std::array<uint8_t, bank_size> bank; //bank loaded from a file.  prg_rom are split across 2 of these.
+typedef std::array<uint8_t, 1024> name_table;
 
 //module scope -- actually, i have no idea what the scope of these declarations is.
 CartridgeMem PRGROM;
 CartridgeMem CHRROM;
+
+export enum class NT_mirroring_mode {vertical, horizontal, dual};
 
 export class NES_Memory_System
 {
@@ -30,8 +33,11 @@ private:
 	PPU* ppu;
 	NESIO* nesIO;
 	std::array<uint8_t, 65536> RAM = { 0 };
-	std::array<uint8_t, 1024> NameTable1 = { 0 };
-	std::array<uint8_t, 1024> NameTable2 = { 0 };
+	//std::array<uint8_t, 1024> NameTable1 = { 0 };
+	//std::array<uint8_t, 1024> NameTable2 = { 0 };
+	std::array<name_table, 2> NameTables;
+	NT_mirroring_mode mirroring_mode;
+	std::array<uint8_t, 4> mirroring_page_table = { 0 };
 	std::array<uint8_t, 0x20> PPU_Pallette_RAM = { 0 };
 	std::array<uint16_t, banks_in_addr_space> page_table; //provides base addresses
 														  //usage: page_table[page_num] --> base addr.
@@ -79,13 +85,13 @@ private:
 			return CHRROM.ReadROM(address);
 		}
 		else if ((address >= 0x2000) && (address < 0x3000)) {
-			uint16_t array_address = address & 0x03FF;
-			if ((address & 0x2000) > 0) {
-				return NameTable1[array_address];
-			}
-			else {
-				return NameTable2[array_address];
-			}
+			uint8_t page_num = (address & 0b0000'1100'0000'0000) >> 10;
+			//std::cout << (int)page_num;
+			uint16_t offset = (address & 0b0000'0011'1111'1111);
+			//std::cout << (int)offset;
+			uint8_t retval = NameTables[mirroring_page_table[page_num]][offset];
+			//std::cout << (int)retval << "\n";
+			return retval;
 		}
 		else if ((address >= 0x3F00) && (address < 0x4000)) {
 			return PPU_Pallette_RAM[(address & 0x1F)];
@@ -103,13 +109,9 @@ private:
 			//2800 = 2c00 -- nt2
 			//array address = address & 0x03FF
 			//this is wrong...
-			uint16_t array_address = address & 0x03FF;
-			if ((address & 0x2000) > 0) {
-				NameTable1[array_address] = value;
-			}
-			else {
-				NameTable2[array_address] = value;
-			}
+			uint8_t page_num = (address & 0b0000'1100'0000'0000) >> 10;
+			uint16_t offset = (address & 0b0000'0011'1111'1111);
+			NameTables[mirroring_page_table[page_num]][offset] = value;
 		}
 		else if ((address >= 0x3F00) && (address < 0x4000)) {
 			PPU_Pallette_RAM[(address & 0x1F)] = value;
@@ -175,6 +177,23 @@ public:
 
 	void MapCHRBank(uint16_t new_base_addr, uint8_t bank_num) {
 		CHRROM.MapBank(new_base_addr, bank_num);
+	}
+
+	void SetMirroringMode(NT_mirroring_mode mmode) {
+		mirroring_mode = mmode;
+		if (mmode == NT_mirroring_mode::vertical) {
+			mirroring_page_table[0] = 0;
+			mirroring_page_table[1] = 0;
+			mirroring_page_table[2] = 1;
+			mirroring_page_table[3] = 1;
+
+		}
+		else if (mmode == NT_mirroring_mode::horizontal) {
+			mirroring_page_table[0] = 0;
+			mirroring_page_table[1] = 1;
+			mirroring_page_table[2] = 0;
+			mirroring_page_table[3] = 1;
+		}
 	}
 
 	std::string GetRange(uint16_t begin, uint16_t length, uint8_t width)

@@ -32,10 +32,12 @@ int main(int argc, char* args[])
 	MasterClock masterClock(&ppu);
 	
 	NESCPU cpu{ &memory , &masterClock};
-	NESROMLoader::LoadRomFile(R"(C:\Users\Josh\source\NESEmulator\Roms\MarioBros.nes)", &memory);
+	NESROMLoader::LoadRomFile(R"(C:\Users\Josh\source\NESEmulator\Roms\SuperMarioBros.nes)", &memory);
 
 	NEStestloader nestestloader;
 	nestestloader.Init();
+
+	//std::cout << NES_ROM_header.bytes[0] << NES_ROM_header.bytes[1] << NES_ROM_header.bytes[2] << "\n";
 
 	int y_offset = 1;
 
