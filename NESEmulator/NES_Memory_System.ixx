@@ -84,7 +84,8 @@ private:
 		if ((address >= 0) && (address < 0x2000)) {
 			return CHRROM.ReadROM(address);
 		}
-		else if ((address >= 0x2000) && (address < 0x3000)) {
+		else if ((address >= 0x2000) && (address < 0x3F00)) {
+			if (address >= 0x3000) address -= 0x1000;
 			uint8_t page_num = (address & 0b0000'1100'0000'0000) >> 10;
 			//std::cout << (int)page_num;
 			uint16_t offset = (address & 0b0000'0011'1111'1111);

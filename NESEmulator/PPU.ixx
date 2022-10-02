@@ -64,8 +64,7 @@ private:
 
 	uint8_t PPU_scroll_x = 0;
 	uint8_t PPU_scroll_y = 0;
-	bool PPU_scroll_latch = false;
-
+	
 	bool address_latch = false;
 
 	struct Color {
@@ -100,19 +99,44 @@ private:
 	bool bg_opaque = false;
 	bool sprite_0_hit = false;
 
+	//loopy regs
+	uint16_t v = 0;
+	uint16_t t = 0;
+	uint8_t x = 0;
+	bool w = 0;
+
 	Color GetColor(int in_col, int in_row) {
-		int col_adjust = (PPUregs.PPUFlags.PPUCTRL.Base_nametable_address & 1) ? 256 : 0;
-		int row_adjust = (PPUregs.PPUFlags.PPUCTRL.Base_nametable_address & 2) ? 240 : 0;
-		int col = in_col + PPU_scroll_x + col_adjust;
-		int row = in_row + PPU_scroll_y + row_adjust;
+		//int col_adjust = (PPUregs.PPUFlags.PPUCTRL.Base_nametable_address & 1) ? 256 : 0;
+		//int row_adjust = (PPUregs.PPUFlags.PPUCTRL.Base_nametable_address & 2) ? 240 : 0;
+		int col = in_col + (int)PPU_scroll_x;// +col_adjust;
+		int row = in_row + (int)PPU_scroll_y;// +row_adjust;
 		bg_opaque = false;
 		int tile_x = (col) / 8;
 		int tile_y = (row) / 8 ;
 		int tile_id = tile_x + (tile_y * 32);
+		if (tile_id >= 960)
+		{
+			if (PPU_scroll_x >= 253) {
+				//std::cout << "breakpoint";
+			}
+			tile_id += 64;
+			//std::cout << "tile overflow\n";
+			//std::cout << "col: " << col << ", row: " << row;
+			//std::cout << "scroll_x: " << (int)PPU_scroll_x << ", scroll_y: " << (int)PPU_scroll_y << "\n";
+		}
+			
 		//if (PPUregs.PPUFlags.PPUCTRL.Base_nametable_address != 0) std::cout << "base nt addr != 0\n";
-		uint16_t base_nametable_address = 0x2000 + (PPUregs.PPUFlags.PPUCTRL.Base_nametable_address << 10);
+		uint16_t base_nametable_increment = (PPUregs.PPUFlags.PPUCTRL.Base_nametable_address << 10);
+		uint16_t base_nametable_address = 0x2000 + base_nametable_increment;
 		uint16_t tile_addr = base_nametable_address + tile_id;
+		if (base_nametable_increment != 0)
+		{
+			//std::cout << "tile address: " << std::hex << (int)tile_addr << "\n";
+		}
+			
+			
 		uint8_t tile_num = ReadAddr(tile_addr);
+		if(tile_addr > 0x3FC0) std::cout << "reading from address that's too high\n"; //this isn't the cause...
 
 		uint8_t block_x = tile_x / 4;
 		uint8_t block_y = tile_y / 4;
@@ -120,7 +144,9 @@ private:
 		uint8_t quad_index_x = (tile_x % 4) / 2;
 		uint8_t quad_index_y = (tile_y % 4) / 2;
 
-		uint16_t attr_addr = base_nametable_address + 0x3C0 + block_x + block_y * 8;
+		uint16_t attr_base = (tile_addr & 0b0000'1100'0000'0000) + 0x3C0;
+
+		uint16_t attr_addr = base_nametable_address + attr_base + block_x + block_y * 8;
 		uint8_t attr_byte = ReadAddr(attr_addr); //covers 16 tiles... 4x4
 		uint8_t attr_byte_index = (quad_index_x % 2) + (quad_index_y % 2) * 2;
 		uint8_t attr_byte_mask = 0xC0 >> ((3-attr_byte_index)*2);
@@ -163,6 +189,9 @@ private:
 
 	int sprite_0_in_current_row = -1;
 	int test_ctr = 0;
+
+	
+
 public:
 	void Tick() {
 		//std::cout << "row: " << row << "col: " << col << "\n";
@@ -280,13 +309,17 @@ public:
 	uint8_t PPUReadBuffer = 0;
 	uint8_t ReadReg(uint8_t reg_num) {
 		if (reg_num == 7) {
-			address_latch = false;
-			PPU_scroll_latch = false;
+			uint8_t temp_read_buf = PPUReadBuffer;
 			PPUReadBuffer = ReadAddr(PPUAddr.address);
-			return PPUReadBuffer;
+			PPUAddr.address += (PPUregs.PPUFlags.PPUCTRL.VRAM_address_increment ? 32 : 1); //increment based on 0x2000
+			return temp_read_buf;
 		}
 		if (reg_num == 4) {
 			return OAM.bytes[PPUregs.PPUFlags.OAMADDR];
+		}
+		if (reg_num == 2) {
+			address_latch = false;
+			return PPUregs.bytes[2];
 		}
 		else if (reg_num < 8) {
 			return PPUregs.bytes[reg_num];
@@ -296,13 +329,13 @@ public:
 
 	void WriteReg(uint8_t reg_num, uint8_t value) {
 		if (reg_num == 5) {
-			if (PPU_scroll_latch) {
+			if (address_latch) {
 				PPU_scroll_y = value;
 			}
 			else {
 				PPU_scroll_x = value;
 			}
-			PPU_scroll_latch = !PPU_scroll_latch;
+			address_latch = !address_latch;
 		}
 		else if (reg_num == 6) {
 			//std::cout << "writing reg address: " << (int)value << "\n";
@@ -322,6 +355,13 @@ public:
 		}
 		else if (reg_num < 8) {
 			PPUregs.bytes[reg_num] = value;
+			uint8_t base_nt_addr = PPUregs.bytes[0] & 0x03;
+			if (base_nt_addr != 0)
+			{
+				std::cout << "base nt addr not 0: " << (int)base_nt_addr << "\n";
+				std::cout << "x scroll: " << (int)PPU_scroll_x << ", y scroll: " << (int)PPU_scroll_y << "\n";
+			}
+			
 		}
 	}
 
