@@ -49,7 +49,7 @@ private:
 		else if (address >= 0x2000 && address < 0x4000) {
 			ppu->WriteReg(address & 0x0007, data);
 		}
-		else if (address == 0x4014) {
+		else if (address == 0x4014) { //?????
 			//OAM DMA
 		}
 		else if (address == 0x4016) {
@@ -86,7 +86,7 @@ private:
 		}
 		else if ((address >= 0x2000) && (address < 0x3F00)) {
 			if (address >= 0x3000) address -= 0x1000;
-			uint8_t page_num = (address & 0b0000'1100'0000'0000) >> 10;
+			uint16_t page_num = (address & 0b0000'1100'0000'0000) >> 10;
 			//std::cout << (int)page_num;
 			uint16_t offset = (address & 0b0000'0011'1111'1111);
 			//std::cout << (int)offset;
@@ -95,27 +95,38 @@ private:
 			return retval;
 		}
 		else if ((address >= 0x3F00) && (address < 0x4000)) {
-			return PPU_Pallette_RAM[(address & 0x1F)];
+			uint16_t final_address = address;
+			if ((address == 0x3F10) || (address == 0x3F14) || (address == 0x3F18) || (address == 0x3F1C)) {
+				final_address &= 0xFFEF;
+			}
+			return PPU_Pallette_RAM[(final_address & 0x1F)];
 		}
 		else return 0;
 	}
 
 	void WriteRawPPUAddr(uint16_t address, uint8_t value) {
-		if ((address >= 0x2000) && (address < 0x3000)) {
+		//if (address >= 0x2800) std::cout << "address: " << std::hex << (int)address << "\n";
+		//never writes to 2800 or above...  i wonder if we need to take base page addr into account...  
 
-			//std::cout << "writing to vram\n";
-			//write to vram
-			//donkey kong has horizontal mirroring
-			//2000 = 2400 -- nt1
-			//2800 = 2c00 -- nt2
-			//array address = address & 0x03FF
-			//this is wrong...
-			uint8_t page_num = (address & 0b0000'1100'0000'0000) >> 10;
+		if (address > 0x4000) std::cout << "failing to mirror PPU write addresses down\n";
+
+		if ((address >= 0x2000) && (address < 0x3F00)) {
+			if (address >= 0x3000) address -= 0x1000;
+			
+			uint16_t page_num = (address & 0b0000'1100'0000'0000) >> 10;
+			
+			//std::cout << "writing to address: " << std::hex << (int)address << "\n";
+			//std::cout << "page num: " << std::dec << (int)page_num << "\n"; //but should this ever be 2 or 3?
+			
 			uint16_t offset = (address & 0b0000'0011'1111'1111);
 			NameTables[mirroring_page_table[page_num]][offset] = value;
 		}
 		else if ((address >= 0x3F00) && (address < 0x4000)) {
-			PPU_Pallette_RAM[(address & 0x1F)] = value;
+			uint16_t final_addr = address;
+			if ((address == 0x3F10) || (address == 0x3F14) || (address == 0x3F18) || (address == 0x3F1C)) {
+				final_addr &= 0xFFEF;
+			}
+			PPU_Pallette_RAM[(final_addr & 0x1F)] = value;
 		}
 	}
 
@@ -184,17 +195,39 @@ public:
 		mirroring_mode = mmode;
 		if (mmode == NT_mirroring_mode::vertical) {
 			mirroring_page_table[0] = 0;
-			mirroring_page_table[1] = 0;
-			mirroring_page_table[2] = 1;
-			mirroring_page_table[3] = 1;
-
-		}
-		else if (mmode == NT_mirroring_mode::horizontal) {
-			mirroring_page_table[0] = 0;
 			mirroring_page_table[1] = 1;
 			mirroring_page_table[2] = 0;
 			mirroring_page_table[3] = 1;
+
 		}
+		else if (mmode == NT_mirroring_mode::horizontal) {//this is mario...???
+			mirroring_page_table[0] = 0;
+			mirroring_page_table[1] = 0;
+			mirroring_page_table[2] = 1;
+			mirroring_page_table[3] = 1;
+		}
+	}
+
+	std::string PPURange(uint16_t begin, uint16_t length, uint8_t width)
+	{
+		std::string output;
+		std::stringstream ss;
+		int alignmentI = 0;
+		for (int i = begin; i < begin + length; i++)
+		{
+			if (alignmentI % width == 0)
+			{
+				ss << std::setw(4) << std::setfill('0') << std::hex << i << ":";
+			}
+			ss << " " << std::setw(2) << std::setfill('0') << std::hex << (int)ReadRawPPUAddr(i);
+			if (alignmentI % width == width - 1)
+			{
+				ss << "\n";
+			}
+			alignmentI++;
+		}
+		output = ss.str();
+		return output;
 	}
 
 	std::string GetRange(uint16_t begin, uint16_t length, uint8_t width)

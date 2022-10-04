@@ -65,7 +65,7 @@ private:
 	uint8_t PPU_scroll_x = 0;
 	uint8_t PPU_scroll_y = 0;
 	
-	bool address_latch = false;
+	
 
 	struct Color {
 		uint8_t r;
@@ -103,7 +103,7 @@ private:
 	uint16_t v = 0;
 	uint16_t t = 0;
 	uint8_t x = 0;
-	bool w = 0;
+	bool address_latch = false; //loopy w
 
 	Color GetColor(int in_col, int in_row) {
 		//int col_adjust = (PPUregs.PPUFlags.PPUCTRL.Base_nametable_address & 1) ? 256 : 0;
@@ -112,29 +112,45 @@ private:
 		int row = in_row + (int)PPU_scroll_y;// +row_adjust;
 		bg_opaque = false;
 		int tile_x = (col) / 8;
-		int tile_y = (row) / 8 ;
-		int tile_id = tile_x + (tile_y * 32);
-		if (tile_id >= 960)
-		{
-			if (PPU_scroll_x >= 253) {
-				//std::cout << "breakpoint";
-			}
-			tile_id += 64;
-			//std::cout << "tile overflow\n";
-			//std::cout << "col: " << col << ", row: " << row;
-			//std::cout << "scroll_x: " << (int)PPU_scroll_x << ", scroll_y: " << (int)PPU_scroll_y << "\n";
+		int tile_y = (row) / 8;
+		bool x_increment = 0;
+		bool y_increment = 0;
+		
+		if (tile_x > 31) {
+			tile_x -= 32;
+			x_increment = 1;
 		}
+		if (tile_y > 29) {
+			tile_y -= 29;
+			y_increment = 1;
+		}
+			
+			
+		int tile_id = tile_x + (tile_y * 32);
+		
 			
 		//if (PPUregs.PPUFlags.PPUCTRL.Base_nametable_address != 0) std::cout << "base nt addr != 0\n";
-		uint16_t base_nametable_increment = (PPUregs.PPUFlags.PPUCTRL.Base_nametable_address << 10);
+		uint16_t base_nametable_increment;
+		/*
+		if (row < 30) {
+			base_nametable_increment = 0;
+		}
+		else {*/
+			base_nametable_increment = (PPUregs.PPUFlags.PPUCTRL.Base_nametable_address << 10);
+		//}
+		
 		uint16_t base_nametable_address = 0x2000 + base_nametable_increment;
 		uint16_t tile_addr = base_nametable_address + tile_id;
-		if (base_nametable_increment != 0)
-		{
-			//std::cout << "tile address: " << std::hex << (int)tile_addr << "\n";
+		
+		if (x_increment) {
+			tile_addr += 0x400;
+		}
+		if (y_increment) {
+			tile_addr += 0x400;
 		}
 			
-			
+		PPUAddr.address = tile_addr;
+
 		uint8_t tile_num = ReadAddr(tile_addr);
 		if(tile_addr > 0x3FC0) std::cout << "reading from address that's too high\n"; //this isn't the cause...
 
@@ -190,7 +206,7 @@ private:
 	int sprite_0_in_current_row = -1;
 	int test_ctr = 0;
 
-	
+	int displayntcounter = 0;
 
 public:
 	void Tick() {
@@ -260,6 +276,10 @@ public:
 						//std::cout << "sprite 0 in current row " << sprite_0_in_current_row << " row: " << (int)i << "\n";
 						if (bg_opaque && (sprite_0_in_current_row == i)) {
 							//std::cout << "bg_opaque";
+							if (sprite_0_hit == false) {
+								PPUregs.PPUFlags.PPUSTATUS.sprite_0_hit = 1;
+								//std::cout << "sprite 0 hit" << "row: " << row << ", col: " << col << "\n";
+							}
 							sprite_0_hit = true;
 						}
 					}
@@ -276,13 +296,19 @@ public:
 				std::cout << ", attr: " << (int)OAM.sprites[i].attributes;
 				std::cout << ", index: " << std::hex << (int)OAM.sprites[i].tile_index << "\n";
 			}*/
-			std::cout << std::flush;
 			PPUregs.PPUFlags.PPUSTATUS.vblank_started = 1;//flag of the 2002 register
+			/*
+			if (displayntcounter++ == 100) {
+				DisplayNT();
+				displayntcounter = 0;
+			}*/
+			
 			renderOut->EndFrame();
+			/*
 			if (sprite_0_hit) {
 				//std::cout << "sprite 0 hit\n";
 				PPUregs.PPUFlags.PPUSTATUS.sprite_0_hit = 1;
-			}
+			}*/
 			frame++;
 		}
 		else if ((row == 261) && (col == 0)) {
@@ -327,8 +353,15 @@ public:
 		else return 0;
 	}
 
+	bool reg_write_debug_out = false;
+
 	void WriteReg(uint8_t reg_num, uint8_t value) {
 		if (reg_num == 5) {
+			if (reg_write_debug_out)
+			{
+				std::cout << "writing reg 2005 (scroll): " << std::hex << (int)value << "row: " << row << ", col: " << col << "\n";
+			}
+				
 			if (address_latch) {
 				PPU_scroll_y = value;
 			}
@@ -336,32 +369,64 @@ public:
 				PPU_scroll_x = value;
 			}
 			address_latch = !address_latch;
+
+			x = value & 0x07;
+			t |= ((value >> 3) & 0x1F);
 		}
 		else if (reg_num == 6) {
-			//std::cout << "writing reg address: " << (int)value << "\n";
+			
+			if (reg_write_debug_out) {
+				std::cout << "writing reg 2006 (ppuaddr): " << std::hex << (int)value << "row: " << row << ", col: " << col << "\n";
+			}
+			
 			if (address_latch == false) {
 				PPUAddr.bytes[1] = value;
 				address_latch = true;
 			}
 			else {
 				PPUAddr.bytes[0] = value;
+				PPUregs.PPUFlags.PPUCTRL.Base_nametable_address = (value & 0x0C) >> 10;
 				address_latch = false;
 			}
 		}
 		else if (reg_num == 7) {
+			if (reg_write_debug_out) {
+				std::cout << "writing reg 2007 (ppudata): " << std::hex << (int)value << "row: " << row << ", col: " << col << "\n";
+			}
+			
 			WriteAddr(PPUAddr.address, value);
 			PPUAddr.address += (PPUregs.PPUFlags.PPUCTRL.VRAM_address_increment ? 32 : 1); //increment based on 0x2000
 			PPUAddr.address = PPUAddr.address % 0x4000;
 		}
 		else if (reg_num < 8) {
 			PPUregs.bytes[reg_num] = value;
-			uint8_t base_nt_addr = PPUregs.bytes[0] & 0x03;
-			if (base_nt_addr != 0)
-			{
-				std::cout << "base nt addr not 0: " << (int)base_nt_addr << "\n";
-				std::cout << "x scroll: " << (int)PPU_scroll_x << ", y scroll: " << (int)PPU_scroll_y << "\n";
+		}
+		if (reg_num == 0) {
+			if (reg_write_debug_out) {
+				std::cout << "writing reg 2000: " << std::hex << (int)value << "row: " << row << ", col: " << col << "\n";
 			}
 			
+			t &= 0xF3FF;
+			uint16_t update_value = uint16_t(value & 0x03) << 10;
+			t |= uint16_t(value & 0x03) << 10;
+			/*
+			if (PPUregs.PPUFlags.PPUCTRL.Base_nametable_address != 0) {
+				std::cout << "base nametable address: " << (int)PPUregs.PPUFlags.PPUCTRL.Base_nametable_address << "\n";
+				std::cout << "ppu addr before inputting nametable address: " << std::hex << (int)PPUAddr.address << "\n";
+			}
+			*/
+			/*
+			if ((PPUAddr.address) >= 0x2000 && (PPUAddr.address < 0x3F00))//hackiest hack ever
+			{
+				PPUAddr.address &= 0xF3FF;//??
+				PPUAddr.address |= ((uint16_t)(PPUregs.PPUFlags.PPUCTRL.Base_nametable_address) << 10);//??
+			}
+			*/
+			/*
+			if (PPUregs.PPUFlags.PPUCTRL.Base_nametable_address != 0) {
+				std::cout << "ppu addr after inputting nametable address: " << std::hex << (int)PPUAddr.address << "\n";
+			}
+			*/
 		}
 	}
 
@@ -377,4 +442,6 @@ public:
 		OAM.bytes[address] = data;
 		//std::cout << "OAM transfering: " << (int)address << ", " << (int)data << "\n";
 	}
+
+	void DisplayNT();
 };

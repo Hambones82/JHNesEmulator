@@ -1,3 +1,4 @@
+#include <iostream>
 #include <stdint.h>
 #include <array>
 
@@ -35,3 +36,7 @@ const std::array<PPU::Color, 64> PPU::MasterPallette = {
 	Color{204,210,120},Color{180,222,120},Color{168,226,144},Color{152,226,180},
 	Color{160,214,228},Color{160,162,160},Color{0,0,0},Color{0,0,0}
 };
+
+void PPU::DisplayNT() {
+	std::cout << memory_system->PPURange(0x2000, 0x800, 32);
+}

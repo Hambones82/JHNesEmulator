@@ -50,14 +50,19 @@ public:
 		renderTexture = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_RGB888, SDL_TEXTUREACCESS_STREAMING, window_width, window_height);
 		//debugTexture = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_RGB888, SDL_TEXTUREACCESS_STREAMING, screen_width, screen_height);
 	}
+	bool frame_markers_debug = false;
+	
 	void StartFrame()
 	{
 		//std::cout << "starting frame\n";
 		SDL_LockTexture(renderTexture, NULL, (void**)&pixelBuffer, &pitch);
 		texture_locked = true;
 		pitch /= sizeof(int32_t);
-		//std::cout << "start frame\n";
+		if (frame_markers_debug) {
+			std::cout << "start frame\n";
+		}
 	}
+	uint8_t frame_counter = 0;
 	void EndFrame()
 	{	
 		//for (int i = 0; i < (10 * 10); i++) { //wtf???
@@ -68,6 +73,14 @@ public:
 		SDL_RenderCopy(renderer, renderTexture, NULL, NULL);
 		//SDL_RenderCopy(renderer, debugTexture, NULL, NULL);
 		SDL_RenderPresent(renderer);
+		if (frame_markers_debug) {
+			std::cout << "end frame\n";
+		}
+		frame_counter++;
+		if (frame_counter == 10) {
+			std::cout << std::flush;
+			frame_counter = 0;
+		}
 		//std::cout << "end frame\n";
 	}
 	void SetColor(int r, int g, int b, int a)

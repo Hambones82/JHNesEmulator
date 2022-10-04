@@ -39,10 +39,10 @@ public:
 			std::vector<uint8_t>::const_iterator last = file_buf.begin() + 15;
 			std::vector<uint8_t> header_in(first, last);
 			
+			memcpy(NES_ROM_header.bytes, header_in.data(), 16);
+
 			NT_mirroring_mode m_mode = NES_ROM_header.flags.info.mirroring ? NT_mirroring_mode::vertical : NT_mirroring_mode::horizontal;
 			memory_system->SetMirroringMode(m_mode);
-
-			memcpy(NES_ROM_header.bytes, header_in.data(), 16);
 
 			uint8_t PRG_size = NES_ROM_header.flags.PRG_ROM_size; // size in 16k chunks, total of 2 banks.
 			uint8_t CHR_size = NES_ROM_header.flags.CHR_ROM_size; // size in 8k chunks
