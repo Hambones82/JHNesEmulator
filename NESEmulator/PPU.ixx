@@ -106,8 +106,6 @@ private:
 	bool address_latch = false; //loopy w
 
 	Color GetColor(int in_col, int in_row) {
-		//int col_adjust = (PPUregs.PPUFlags.PPUCTRL.Base_nametable_address & 1) ? 256 : 0;
-		//int row_adjust = (PPUregs.PPUFlags.PPUCTRL.Base_nametable_address & 2) ? 240 : 0;
 		int col = in_col + (int)PPU_scroll_x;// +col_adjust;
 		int row = in_row + (int)PPU_scroll_y;// +row_adjust;
 		bg_opaque = false;
@@ -125,19 +123,10 @@ private:
 			y_increment = 1;
 		}
 			
-			
 		int tile_id = tile_x + (tile_y * 32);
 		
-			
-		//if (PPUregs.PPUFlags.PPUCTRL.Base_nametable_address != 0) std::cout << "base nt addr != 0\n";
 		uint16_t base_nametable_increment;
-		/*
-		if (row < 30) {
-			base_nametable_increment = 0;
-		}
-		else {*/
-			base_nametable_increment = (PPUregs.PPUFlags.PPUCTRL.Base_nametable_address << 10);
-		//}
+		base_nametable_increment = (PPUregs.PPUFlags.PPUCTRL.Base_nametable_address << 10);
 		
 		uint16_t base_nametable_address = 0x2000 + base_nametable_increment;
 		uint16_t tile_addr = base_nametable_address + tile_id;
@@ -160,10 +149,18 @@ private:
 		uint8_t quad_index_x = (tile_x % 4) / 2;
 		uint8_t quad_index_y = (tile_y % 4) / 2;
 
+		uint16_t attr_base = 0x3C0;
+
+		uint16_t attr_addr = base_nametable_address + (x_increment * 0x400) + (y_increment * 0x400) + attr_base + block_x + block_y * 8;
+
+		/*
 		uint16_t attr_base = (tile_addr & 0b0000'1100'0000'0000) + 0x3C0;
 
 		uint16_t attr_addr = base_nametable_address + attr_base + block_x + block_y * 8;
-		uint8_t attr_byte = ReadAddr(attr_addr); //covers 16 tiles... 4x4
+		*/
+		
+		uint8_t attr_byte = ReadAddr(attr_addr); //covers 16 tiles... 4x4 -- probably reading this wrong...
+
 		uint8_t attr_byte_index = (quad_index_x % 2) + (quad_index_y % 2) * 2;
 		uint8_t attr_byte_mask = 0xC0 >> ((3-attr_byte_index)*2);
 
@@ -271,8 +268,10 @@ public:
 					uint8_t pallette_index = GetPalletteIndex(tile_num, y_offset, x_offset, attr, false, side);
 					if (pallette_index != 0xFF) {
 						auto color = MasterPallette[pallette_index];
-						renderOut->SetColor(color.r, color.g, color.b, 0);
-						renderOut->DrawPixel(col, row);
+						if (!((current_row_sprites[i].attributes & 0x20) && bg_opaque)) {
+							renderOut->SetColor(color.r, color.g, color.b, 0);
+							renderOut->DrawPixel(col, row);
+						}
 						//std::cout << "sprite 0 in current row " << sprite_0_in_current_row << " row: " << (int)i << "\n";
 						if (bg_opaque && (sprite_0_in_current_row == i)) {
 							//std::cout << "bg_opaque";

@@ -96,9 +96,13 @@ private:
 		}
 		else if ((address >= 0x3F00) && (address < 0x4000)) {
 			uint16_t final_address = address;
-			if ((address == 0x3F10) || (address == 0x3F14) || (address == 0x3F18) || (address == 0x3F1C)) {
+			if ((address == 0x3F04) || (address == 0x3F08) || (address == 0x3F0C)) {
+				final_address = 0x3F00;
+			}
+			else if ((address == 0x3F10) || (address == 0x3F14) || (address == 0x3F18) || (address == 0x3F1C)) {
 				final_address &= 0xFFEF;
 			}
+			
 			return PPU_Pallette_RAM[(final_address & 0x1F)];
 		}
 		else return 0;
@@ -126,6 +130,7 @@ private:
 			if ((address == 0x3F10) || (address == 0x3F14) || (address == 0x3F18) || (address == 0x3F1C)) {
 				final_addr &= 0xFFEF;
 			}
+			
 			PPU_Pallette_RAM[(final_addr & 0x1F)] = value;
 		}
 	}
