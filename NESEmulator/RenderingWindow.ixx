@@ -85,8 +85,6 @@ public:
 	}
 	void SetColor(int r, int g, int b, int a)
 	{
-		//if(r != 0) 
-			//std::cout << r << g << b << "\n";
 		currentR = r;
 		currentG = g;
 		currentB = b;
