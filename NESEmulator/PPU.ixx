@@ -1,6 +1,8 @@
+#include<chrono>
 #include <stdint.h>
 #include <iostream>
 #include <array>
+
 class NES_Memory_System;
 
 import RenderingWindow;
@@ -105,43 +107,31 @@ private:
 	uint8_t x = 0;
 	bool address_latch = false; //loopy w
 
+	
 	Color GetColor(int in_col, int in_row) {
 		int col = in_col + (int)PPU_scroll_x;// +col_adjust;
 		int row = in_row + (int)PPU_scroll_y;// +row_adjust;
 		bg_opaque = false;
 		int tile_x = (col) / 8;
 		int tile_y = (row) / 8;
-		bool x_increment = 0;
-		bool y_increment = 0;
+		bool x_increment = tile_x / 32;
+		bool y_increment = tile_y / 32;
 		
-		if (tile_x > 31) {
-			tile_x -= 32;
-			x_increment = 1;
-		}
-		if (tile_y > 29) {
-			tile_y -= 29;
-			y_increment = 1;
-		}
+		tile_x %= 32;
+		tile_y %= 32;
+
+		uint16_t base_nametable_address = 0x2000 + (PPUregs.PPUFlags.PPUCTRL.Base_nametable_address << 10);
+		uint16_t tile_addr = base_nametable_address + tile_x + (tile_y * 32);
+		
+		
+		tile_addr += x_increment * 0x400;
+		tile_addr += y_increment * 0x400;
+		
 			
-		int tile_id = tile_x + (tile_y * 32);
-		
-		uint16_t base_nametable_increment;
-		base_nametable_increment = (PPUregs.PPUFlags.PPUCTRL.Base_nametable_address << 10);
-		
-		uint16_t base_nametable_address = 0x2000 + base_nametable_increment;
-		uint16_t tile_addr = base_nametable_address + tile_id;
-		
-		if (x_increment) {
-			tile_addr += 0x400;
-		}
-		if (y_increment) {
-			tile_addr += 0x400;
-		}
-			
-		PPUAddr.address = tile_addr;
+		//PPUAddr.address = tile_addr;
 
 		uint8_t tile_num = ReadAddr(tile_addr);
-		if(tile_addr > 0x3FC0) std::cout << "reading from address that's too high\n"; //this isn't the cause...
+		//if(tile_addr > 0x3FC0) std::cout << "reading from address that's too high\n"; //this isn't the cause...
 
 		uint8_t block_x = tile_x / 4;
 		uint8_t block_y = tile_y / 4;
@@ -149,16 +139,8 @@ private:
 		uint8_t quad_index_x = (tile_x % 4) / 2;
 		uint8_t quad_index_y = (tile_y % 4) / 2;
 
-		uint16_t attr_base = 0x3C0;
+		uint16_t attr_addr = base_nametable_address + (x_increment * 0x400) + (y_increment * 0x400) + 0x3C0 + block_x + block_y * 8;
 
-		uint16_t attr_addr = base_nametable_address + (x_increment * 0x400) + (y_increment * 0x400) + attr_base + block_x + block_y * 8;
-
-		/*
-		uint16_t attr_base = (tile_addr & 0b0000'1100'0000'0000) + 0x3C0;
-
-		uint16_t attr_addr = base_nametable_address + attr_base + block_x + block_y * 8;
-		*/
-		
 		uint8_t attr_byte = ReadAddr(attr_addr); //covers 16 tiles... 4x4 -- probably reading this wrong...
 
 		uint8_t attr_byte_index = (quad_index_x % 2) + (quad_index_y % 2) * 2;
@@ -167,6 +149,7 @@ private:
 		uint8_t attr = (attr_byte_mask & attr_byte) >> ((attr_byte_index)*2); //portion of lookup to pallette ram
 		
 		uint8_t pallette_index = GetPalletteIndex(tile_num, row%8, col%8, attr, true, (PPUregs.PPUFlags.PPUCTRL.Background_pattern_table_address));
+		
 		return MasterPallette[pallette_index];
 	}
 	
@@ -310,6 +293,9 @@ public:
 			}*/
 			frame++;
 		}
+		else if (col == 257) {
+			PPU_scroll_x = temp_PPU_scroll_x;
+		}
 		else if ((row == 261) && (col == 0)) {
 			//std::cout << "starting frame\n";
 			PPUregs.PPUFlags.PPUSTATUS.vblank_started = 0;//flag of the 2002 register
@@ -318,6 +304,9 @@ public:
 		else if ((row == 261) && (col == 1)) {
 			PPUregs.PPUFlags.PPUSTATUS.sprite_0_hit = 0;
 			sprite_0_hit = false;
+		}
+		else if ((row == 261) && (col == 304)) {
+			PPU_scroll_y = temp_PPU_scroll_y;
 		}
 
 	}
@@ -354,6 +343,9 @@ public:
 
 	bool reg_write_debug_out = false;
 
+	uint8_t temp_PPU_scroll_x = 0;
+	uint8_t temp_PPU_scroll_y = 0;
+
 	void WriteReg(uint8_t reg_num, uint8_t value) {
 		if (reg_num == 5) {
 			if (reg_write_debug_out)
@@ -362,10 +354,10 @@ public:
 			}
 				
 			if (address_latch) {
-				PPU_scroll_y = value;
+				temp_PPU_scroll_y = value;
 			}
 			else {
-				PPU_scroll_x = value;
+				temp_PPU_scroll_x = value;
 			}
 			address_latch = !address_latch;
 

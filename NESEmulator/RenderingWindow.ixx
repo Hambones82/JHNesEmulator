@@ -29,6 +29,11 @@ private:
 	int32_t pitch = 0;
 	uint32_t* pixelBuffer = nullptr;
 
+
+	uint32_t obuffer1[256*240] = { 0 };
+	uint32_t obuffer2[256*240] = { 0 };
+	bool usebuffer1 = true;
+
 	bool texture_locked = false;
 	//TTF_Font* Debug_Font;
 public:
@@ -55,12 +60,14 @@ public:
 	void StartFrame()
 	{
 		//std::cout << "starting frame\n";
-		SDL_LockTexture(renderTexture, NULL, (void**)&pixelBuffer, &pitch);
-		texture_locked = true;
-		pitch /= sizeof(int32_t);
+		//SDL_LockTexture(renderTexture, NULL, (void**)&pixelBuffer, &pitch);
+		//texture_locked = true;
+		//pitch /= sizeof(int32_t);
 		if (frame_markers_debug) {
 			std::cout << "start frame\n";
 		}
+		usebuffer1 = !usebuffer1;
+
 	}
 	uint8_t frame_counter = 0;
 	void EndFrame()
@@ -68,11 +75,20 @@ public:
 		//for (int i = 0; i < (10 * 10); i++) { //wtf???
 		//	std::cout << (int)pixelBuffer[i] << "\n";
 		//}
-		SDL_UnlockTexture(renderTexture);
-		texture_locked = false;
-		SDL_RenderCopy(renderer, renderTexture, NULL, NULL);
-		//SDL_RenderCopy(renderer, debugTexture, NULL, NULL);
-		SDL_RenderPresent(renderer);
+		//uint8_t* current_buffer = usebuffer1 ? obuffer1 : obuffer2;
+
+		if (true) {
+			SDL_LockTexture(renderTexture, NULL, (void**)&pixelBuffer, &pitch);
+			for (int i = 0; i < 240 * 256; i++) {
+				pixelBuffer[i] = usebuffer1 ? obuffer1[i] : obuffer2[i];
+			}
+			SDL_UnlockTexture(renderTexture);
+
+			SDL_RenderCopy(renderer, renderTexture, NULL, NULL);
+			//SDL_RenderCopy(renderer, debugTexture, NULL, NULL);
+			SDL_RenderPresent(renderer);
+		}
+		
 		if (frame_markers_debug) {
 			std::cout << "end frame\n";
 		}
@@ -95,10 +111,18 @@ public:
 		//std::cout << "trying to draw pixel\n";
 		uint32_t color = ((currentR << 16) + (currentG << 8) + (currentB));
 		//if (color != 0) std::cout << color << "\n";
+		
+		if (usebuffer1) {
+			obuffer1[x + y * 256] = color;
+		}
+		else {
+			obuffer2[x + y * 256] = color;
+		}
+		/*
 		if (texture_locked) {
 			//std::cout << "writing color: " << (int)color << "\n";
 			pixelBuffer[x + y * window_width] = color;
-		}
+		}*/
 	}
 
 	void ShutDown()
