@@ -50,8 +50,8 @@ private:
 			}PPUSTATUS; //$2002
 			uint8_t OAMADDR; //$2003
 			uint8_t	OAMDATA; //$2004
-			uint8_t PPUSCROLL; //$2005
-			uint8_t PPUADDR; //$2006
+			uint8_t PPUSCROLL; //$2005 --> this should be a dummy register
+			uint8_t PPUADDR; //$2006 --> this should be a dummy register
 			uint8_t PPUDATA; //$2007
 		}PPUFlags;
 	}PPUregs;
@@ -101,14 +101,50 @@ private:
 	bool bg_opaque = false;
 	bool sprite_0_hit = false;
 
-	//loopy regs
-	uint16_t v = 0;
-	uint16_t t = 0;
-	uint8_t x = 0;
+	//loopy regs: https://www.nesdev.org/wiki/PPU_scrolling
+	uint16_t loopy_v = 0;
+	uint16_t loopy_t = 0;
+	uint8_t loopy_x = 0;
 	bool address_latch = false; //loopy w
 
-	
-	Color GetColor(int in_col, int in_row) {
+	//background regs -- see https://www.nesdev.org/wiki/PPU_rendering
+	uint16_t pattern_table_16_1;//16 bits to handle scrolling
+	uint16_t pattern_table_16_2;
+
+	uint8_t pallete_attr_8_1;
+	uint8_t pallete_attr_8_2;
+
+
+	//need to set bg opaque
+	Color GetBGColor() { //can probably eliminate the in values and just use col/row...
+		if ((col % 8) == 0) {
+			//fetch data into pattern regs
+			uint8_t tile_num = ReadAddr(loopy_v);
+			
+			//get pattern table data...
+			uint8_t tile_num_row = tile_num / 16;
+			uint8_t tile_num_col = tile_num % 16;
+
+			uint16_t tile_side = (uint16_t)(PPUregs.PPUFlags.PPUCTRL.Background_pattern_table_address) << 12;
+			uint16_t fetch_address = (tile_num_row << 8) + (tile_num_col << 4) + (row % 8)+tile_side;
+			fetch_address &= 0x3FFF; //??
+			uint16_t fetch_address_1 = fetch_address + 8;
+			fetch_address_1 &= 0x3FFF; //??
+
+			uint8_t plane_1_byte = ReadAddr(fetch_address);
+			uint8_t plane_2_byte = ReadAddr(fetch_address_1);
+
+			pattern_table_16_1 = pattern_table_16_1 << 8;
+			pattern_table_16_1 |= plane_1_byte;
+			pattern_table_16_2 = pattern_table_16_2 << 8;
+			pattern_table_16_2 |= plane_2_byte;
+		}
+		
+		
+		
+
+		//fetch data into attr regs
+		
 		int col = in_col + (int)PPU_scroll_x;// +col_adjust;
 		int row = in_row + (int)PPU_scroll_y;// +row_adjust;
 		bg_opaque = false;
@@ -120,8 +156,7 @@ private:
 		tile_x %= 32;
 		tile_y %= 32;
 
-		uint16_t base_nametable_address = 0x2000 + (PPUregs.PPUFlags.PPUCTRL.Base_nametable_address << 10);
-		uint16_t tile_addr = base_nametable_address + tile_x + (tile_y * 32);
+		
 		
 		
 		tile_addr += x_increment * 0x400;
@@ -188,6 +223,44 @@ private:
 
 	int displayntcounter = 0;
 
+	bool RenderingIsEnabled() {
+		return (col < max_draw_col) && ((row < max_draw_row) || row == 261) 
+			&& (PPUregs.PPUFlags.MASK.Show_background || PPUregs.PPUFlags.MASK.Show_sprites);
+	}
+
+	//see https://www.nesdev.org/wiki/PPU_scrolling#Wrapping_around
+	void IncrementVertical() {
+		if ((loopy_v & 0x7000) != 0x7000)       // if fine Y < 7
+			loopy_v += 0x1000;                  // increment fine Y
+		else {
+			loopy_v &= ~0x7000;                 // fine Y = 0
+			int y = (loopy_v & 0x03E0) >> 5;    // let y = coarse Y
+			if (y == 29) {
+				y = 0;                          // coarse Y = 0
+				loopy_v ^= 0x0800;              // switch vertical nametable
+			}
+			else if (y == 31) {
+				y = 0;							// coarse Y = 0, nametable not switched
+			}
+				                          
+			else {
+				y += 1;                          // increment coarse Y
+			}
+				
+			loopy_v = (loopy_v & ~0x03E0) | (y << 5);    // put coarse Y back into v
+		}
+	}
+
+	void IncrementHorizontal() {
+		if ((loopy_v & 0x001F) == 31) {  // if coarse X == 31
+			loopy_v &= ~0x001F;          // coarse X = 0
+			loopy_v ^= 0x0400;           // switch horizontal nametable
+		}
+		else {
+			loopy_v += 1;                // increment coarse X
+		}
+	}
+
 public:
 	void Tick() {
 		//std::cout << "row: " << row << "col: " << col << "\n";
@@ -216,14 +289,30 @@ public:
 			//	std::cout << "sprite, row: " << row << "col: " << (int)(current_row_sprites[i].x_pos) << "\n";
 			//}
 		}
-		if (row >= max_row) {
+
+		if (row >= max_row) { //??? probably right?
 			row = 0;
 		}
+		if ((col == 256) && RenderingIsEnabled()) {
+			IncrementVertical();
+		}
+		if (col == 257 && RenderingIsEnabled()) {
+			loopy_v &= 0b1111'1011'1110'0000;
+			loopy_v |= (loopy_t & 0b1111'1011'1110'0000);
+		}
+		if ((row == 261) && (col >= 280 && col <= 304) && RenderingIsEnabled()) {
+			loopy_v &= 0b1000'0100'0001'1111;
+			loopy_v |= (loopy_t & 0b1000'0100'0001'1111);
+		}
+		if (RenderingIsEnabled() && col >= 328 && col <= 256 && ((col % 8) == 0)) {
+			IncrementHorizontal();
+		}
+
 		if ((col < max_draw_col) && row < max_draw_row) {
 			//std::cout << "drawing pixel";
 
 			if (PPUregs.PPUFlags.MASK.Show_background) {
-				auto color = GetColor(col, row);
+				auto color = GetBGColor();
 				renderOut->SetColor(color.r, color.g, color.b, 0);
 				renderOut->DrawPixel(col, row);
 
@@ -270,31 +359,12 @@ public:
 			//evaluate sprite, etc...
 		}
 		else if (row == 241 && col == 1) {
-			//std::cout << "ending frame\n";
-			/*
-			for (int i = 0; i < 64; i++) {
-				std::cout << "oam entry " << i << " x: " << (int)OAM.sprites[i].x_pos;
-				std::cout << ", y: " << (int)OAM.sprites[i].y_pos;
-				std::cout << ", attr: " << (int)OAM.sprites[i].attributes;
-				std::cout << ", index: " << std::hex << (int)OAM.sprites[i].tile_index << "\n";
-			}*/
-			PPUregs.PPUFlags.PPUSTATUS.vblank_started = 1;//flag of the 2002 register
-			/*
-			if (displayntcounter++ == 100) {
-				DisplayNT();
-				displayntcounter = 0;
-			}*/
+			
+			PPUregs.PPUFlags.PPUSTATUS.vblank_started = 1;//flag of the 2002 register -->>?????
 			
 			renderOut->EndFrame();
-			/*
-			if (sprite_0_hit) {
-				//std::cout << "sprite 0 hit\n";
-				PPUregs.PPUFlags.PPUSTATUS.sprite_0_hit = 1;
-			}*/
+			
 			frame++;
-		}
-		else if (col == 257) {
-			PPU_scroll_x = temp_PPU_scroll_x;
 		}
 		else if ((row == 261) && (col == 0)) {
 			//std::cout << "starting frame\n";
@@ -305,14 +375,9 @@ public:
 			PPUregs.PPUFlags.PPUSTATUS.sprite_0_hit = 0;
 			sprite_0_hit = false;
 		}
-		else if ((row == 261) && (col == 304)) {
-			PPU_scroll_y = temp_PPU_scroll_y;
-		}
 
 	}
-	void GetColor(uint8_t& out_r, uint8_t& out_g, uint8_t& out_b) {
 
-	}
 	PPU(RenderingWindow *in_renderOut) {
 		renderOut = in_renderOut;
 	}
@@ -353,16 +418,19 @@ public:
 				std::cout << "writing reg 2005 (scroll): " << std::hex << (int)value << "row: " << row << ", col: " << col << "\n";
 			}
 				
-			if (address_latch) {
-				temp_PPU_scroll_y = value;
+			if (address_latch == 0) {
+				loopy_t &= 0xFFE0;
+				loopy_t |= (value >> 3);
+				loopy_x = value & 0x07;
 			}
 			else {
-				temp_PPU_scroll_x = value;
+				uint16_t CDE = (uint16_t)(value & 0b0011'1000) << 2;
+				uint16_t AB = (uint16_t)(value & 0b0000'1100) << 2;
+				uint16_t FGH = (value & 0b0000'0111) << 12;
+				loopy_t &= 0b1000'1100'0001'1111;
+				loopy_t |= (AB | CDE | FGH);
 			}
 			address_latch = !address_latch;
-
-			x = value & 0x07;
-			t |= ((value >> 3) & 0x1F);
 		}
 		else if (reg_num == 6) {
 			
@@ -371,16 +439,19 @@ public:
 			}
 			
 			if (address_latch == false) {
-				PPUAddr.bytes[1] = value;
+				loopy_t &= 0b1000'0000'1111'1111;
+				loopy_t |= (uint16_t)(value & 0b0011'1111) << 8;
 				address_latch = true;
 			}
 			else {
-				PPUAddr.bytes[0] = value;
-				PPUregs.PPUFlags.PPUCTRL.Base_nametable_address = (value & 0x0C) >> 10;
+				loopy_t &= 0xFF00;
+				loopy_t |= value;
+				loopy_v = loopy_t;
 				address_latch = false;
 			}
 		}
-		else if (reg_num == 7) {
+		else if (reg_num == 7) { //for accuracy, updates to this reg during rendering should increment y and x as indicated 
+								 //in https://www.nesdev.org/wiki/PPU_scrolling
 			if (reg_write_debug_out) {
 				std::cout << "writing reg 2007 (ppudata): " << std::hex << (int)value << "row: " << row << ", col: " << col << "\n";
 			}
@@ -397,27 +468,8 @@ public:
 				std::cout << "writing reg 2000: " << std::hex << (int)value << "row: " << row << ", col: " << col << "\n";
 			}
 			
-			t &= 0xF3FF;
-			uint16_t update_value = uint16_t(value & 0x03) << 10;
-			t |= uint16_t(value & 0x03) << 10;
-			/*
-			if (PPUregs.PPUFlags.PPUCTRL.Base_nametable_address != 0) {
-				std::cout << "base nametable address: " << (int)PPUregs.PPUFlags.PPUCTRL.Base_nametable_address << "\n";
-				std::cout << "ppu addr before inputting nametable address: " << std::hex << (int)PPUAddr.address << "\n";
-			}
-			*/
-			/*
-			if ((PPUAddr.address) >= 0x2000 && (PPUAddr.address < 0x3F00))//hackiest hack ever
-			{
-				PPUAddr.address &= 0xF3FF;//??
-				PPUAddr.address |= ((uint16_t)(PPUregs.PPUFlags.PPUCTRL.Base_nametable_address) << 10);//??
-			}
-			*/
-			/*
-			if (PPUregs.PPUFlags.PPUCTRL.Base_nametable_address != 0) {
-				std::cout << "ppu addr after inputting nametable address: " << std::hex << (int)PPUAddr.address << "\n";
-			}
-			*/
+			loopy_t &= 0xF3FF;
+			loopy_t |= uint16_t(value & 0x03) << 10;
 		}
 	}
 
