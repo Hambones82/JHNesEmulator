@@ -15,8 +15,8 @@ private:
 	int row = 0;
 	int col = 0;
 	int frame = 0;
-	const int max_row = 341;
-	const int max_col = 262;
+	const int max_row = 262;
+	const int max_col = 342;
 	const int max_draw_row = 240;
 	const int max_draw_col = 256;
 	bool nmi_occurred = false;
@@ -50,24 +50,14 @@ private:
 			}PPUSTATUS; //$2002
 			uint8_t OAMADDR; //$2003
 			uint8_t	OAMDATA; //$2004
-			uint8_t PPUSCROLL; //$2005 --> this should be a dummy register
-			uint8_t PPUADDR; //$2006 --> this should be a dummy register
+			uint8_t PPUSCROLL_do_not_use; //$2005 --> this should be a dummy register
+			uint8_t PPUADDR_do_not_use; //$2006 --> this should be a dummy register
 			uint8_t PPUDATA; //$2007
 		}PPUFlags;
 	}PPUregs;
 
 	uint8_t ReadAddr(uint16_t address);
 	void WriteAddr(uint16_t address, uint8_t value);
-
-	union {
-		uint16_t address = 0;
-		uint8_t bytes[2];
-	}PPUAddr;
-
-	uint8_t PPU_scroll_x = 0;
-	uint8_t PPU_scroll_y = 0;
-	
-	
 
 	struct Color {
 		uint8_t r;
@@ -111,22 +101,25 @@ private:
 	uint16_t pattern_table_16_1;//16 bits to handle scrolling
 	uint16_t pattern_table_16_2;
 
-	uint8_t pallete_attr_8_1;
-	uint8_t pallete_attr_8_2;
-
+	uint16_t pallette_attr_16;
 
 	//need to set bg opaque
 	Color GetBGColor() { //can probably eliminate the in values and just use col/row...
+		bg_opaque = false;
 		if ((col % 8) == 0) {
 			//fetch data into pattern regs
-			uint8_t tile_num = ReadAddr(loopy_v);
-			
+			//std::cout << "updating pattern bytes\n";
+			//
+			uint16_t tile_addr = (loopy_v & 0x0FFF) + 0x2000;
+			//std::cout << "row: " << row << ", col: " << col << ", tile addr: " << std::hex << (int)tile_addr << "\n";
+			uint8_t tile_num = ReadAddr(tile_addr);//loopy_v points to name table...  use that...
+			//std::cout << "tile num: " << std::hex << (int)tile_num << "\n";
 			//get pattern table data...
 			uint8_t tile_num_row = tile_num / 16;
 			uint8_t tile_num_col = tile_num % 16;
 
 			uint16_t tile_side = (uint16_t)(PPUregs.PPUFlags.PPUCTRL.Background_pattern_table_address) << 12;
-			uint16_t fetch_address = (tile_num_row << 8) + (tile_num_col << 4) + (row % 8)+tile_side;
+			uint16_t fetch_address = (tile_num_row << 8) + (tile_num_col << 4) + (row % 8) +tile_side;
 			fetch_address &= 0x3FFF; //??
 			uint16_t fetch_address_1 = fetch_address + 8;
 			fetch_address_1 &= 0x3FFF; //??
@@ -134,57 +127,42 @@ private:
 			uint8_t plane_1_byte = ReadAddr(fetch_address);
 			uint8_t plane_2_byte = ReadAddr(fetch_address_1);
 
-			pattern_table_16_1 = pattern_table_16_1 << 8;
-			pattern_table_16_1 |= plane_1_byte;
-			pattern_table_16_2 = pattern_table_16_2 << 8;
-			pattern_table_16_2 |= plane_2_byte;
+			pattern_table_16_1 = pattern_table_16_1 >> 8;
+			pattern_table_16_1 |= plane_1_byte << 8; //this is bit 1 of the pallette index
+			pattern_table_16_2 = pattern_table_16_2 >> 8;
+			pattern_table_16_2 |= plane_2_byte << 8; //this is bit 0 of the pallette index
+
+			pallette_attr_16 >>= 8;
+			pallette_attr_16 |= ReadAddr(0x23C0 | (loopy_v & 0x0C00) | ((loopy_v >> 4) & 0x38) | ((loopy_v >> 2) & 0x07));
 		}
 		
-		
-		
+		uint8_t bit_pos = (15 - ((col % 8) + loopy_x));
 
-		//fetch data into attr regs
-		
-		int col = in_col + (int)PPU_scroll_x;// +col_adjust;
-		int row = in_row + (int)PPU_scroll_y;// +row_adjust;
-		bg_opaque = false;
-		int tile_x = (col) / 8;
-		int tile_y = (row) / 8;
-		bool x_increment = tile_x / 32;
-		bool y_increment = tile_y / 32;
-		
-		tile_x %= 32;
-		tile_y %= 32;
+		uint8_t tile_x = loopy_v & 0x03E0;
+		uint8_t tile_y = loopy_v & 0x001F;
 
-		
-		
-		
-		tile_addr += x_increment * 0x400;
-		tile_addr += y_increment * 0x400;
-		
-			
-		//PPUAddr.address = tile_addr;
-
-		uint8_t tile_num = ReadAddr(tile_addr);
-		//if(tile_addr > 0x3FC0) std::cout << "reading from address that's too high\n"; //this isn't the cause...
-
-		uint8_t block_x = tile_x / 4;
-		uint8_t block_y = tile_y / 4;
+		uint8_t block_x = (tile_x) / 4;
+		uint8_t block_y = (tile_y) / 4;
 
 		uint8_t quad_index_x = (tile_x % 4) / 2;
 		uint8_t quad_index_y = (tile_y % 4) / 2;
 
-		uint16_t attr_addr = base_nametable_address + (x_increment * 0x400) + (y_increment * 0x400) + 0x3C0 + block_x + block_y * 8;
-
-		uint8_t attr_byte = ReadAddr(attr_addr); //covers 16 tiles... 4x4 -- probably reading this wrong...
-
 		uint8_t attr_byte_index = (quad_index_x % 2) + (quad_index_y % 2) * 2;
 		uint8_t attr_byte_mask = 0xC0 >> ((3-attr_byte_index)*2);
 
-		uint8_t attr = (attr_byte_mask & attr_byte) >> ((attr_byte_index)*2); //portion of lookup to pallette ram
+		uint8_t attr = (attr_byte_mask & pallette_attr_16) >> ((attr_byte_index)*2); //portion of lookup to pallette ram
 		
-		uint8_t pallette_index = GetPalletteIndex(tile_num, row%8, col%8, attr, true, (PPUregs.PPUFlags.PPUCTRL.Background_pattern_table_address));
 		
+
+		uint8_t lsbit = (pattern_table_16_1 & (1 << bit_pos)) >> bit_pos;
+		uint8_t msbit = (pattern_table_16_2 & (1 << bit_pos)) >> bit_pos << 1;
+
+		bg_opaque = (lsbit || msbit);
+		
+		uint16_t pallette_addr = 0x3F00 + (attr << 2) + lsbit + msbit;
+
+		uint8_t pallette_index = ReadAddr(pallette_addr);
+
 		return MasterPallette[pallette_index];
 	}
 	
@@ -224,12 +202,13 @@ private:
 	int displayntcounter = 0;
 
 	bool RenderingIsEnabled() {
-		return (col < max_draw_col) && ((row < max_draw_row) || row == 261) 
-			&& (PPUregs.PPUFlags.MASK.Show_background || PPUregs.PPUFlags.MASK.Show_sprites);
+		bool retval = (PPUregs.PPUFlags.MASK.Show_background || PPUregs.PPUFlags.MASK.Show_sprites);
+		//if(((row % 20) == 0) && ((col % 20) == 0))  std::cout << "retval: " << (int)retval << "\n";
+		return retval;
 	}
 
 	//see https://www.nesdev.org/wiki/PPU_scrolling#Wrapping_around
-	void IncrementVertical() {
+	void IncrementVertical() {//i'm not really using this correctly...   
 		if ((loopy_v & 0x7000) != 0x7000)       // if fine Y < 7
 			loopy_v += 0x1000;                  // increment fine Y
 		else {
@@ -268,6 +247,7 @@ public:
 
 		if (col >= max_col) {
 			col = 0;
+			//loopy_v ^= 0x0400;
 			row++;
 			current_row_sprite_counter = 0;
 			sprite_0_in_current_row = -1;
@@ -296,19 +276,19 @@ public:
 		if ((col == 256) && RenderingIsEnabled()) {
 			IncrementVertical();
 		}
-		if (col == 257 && RenderingIsEnabled()) {
+		if ((col == 257) && RenderingIsEnabled()) {
 			loopy_v &= 0b1111'1011'1110'0000;
-			loopy_v |= (loopy_t & 0b1111'1011'1110'0000);
+			loopy_v |= (loopy_t & 0b0000'0100'0001'1111);
 		}
-		if ((row == 261) && (col >= 280 && col <= 304) && RenderingIsEnabled()) {
+		if ((row == 261) && ((col >= 280) || (col <= 304)) && RenderingIsEnabled()) {
 			loopy_v &= 0b1000'0100'0001'1111;
-			loopy_v |= (loopy_t & 0b1000'0100'0001'1111);
+			loopy_v |= (loopy_t & 0b0111'1011'1110'0000);
 		}
-		if (RenderingIsEnabled() && col >= 328 && col <= 256 && ((col % 8) == 0)) {
+		if (RenderingIsEnabled() && ((col >= 328) || (col <= 256)) && ((col % 8) == 0)) {
 			IncrementHorizontal();
 		}
 
-		if ((col < max_draw_col) && row < max_draw_row) {
+		if ((col < max_draw_col) && (row < max_draw_row)) {
 			//std::cout << "drawing pixel";
 
 			if (PPUregs.PPUFlags.MASK.Show_background) {
@@ -358,7 +338,7 @@ public:
 			}
 			//evaluate sprite, etc...
 		}
-		else if (row == 241 && col == 1) {
+		else if ((row == 241) && (col == 1)) {
 			
 			PPUregs.PPUFlags.PPUSTATUS.vblank_started = 1;//flag of the 2002 register -->>?????
 			
@@ -389,8 +369,9 @@ public:
 	uint8_t ReadReg(uint8_t reg_num) {
 		if (reg_num == 7) {
 			uint8_t temp_read_buf = PPUReadBuffer;
-			PPUReadBuffer = ReadAddr(PPUAddr.address);
-			PPUAddr.address += (PPUregs.PPUFlags.PPUCTRL.VRAM_address_increment ? 32 : 1); //increment based on 0x2000
+			PPUReadBuffer = ReadAddr(loopy_v);
+			loopy_v += (PPUregs.PPUFlags.PPUCTRL.VRAM_address_increment ? 32 : 1); //increment based on 0x2000
+			loopy_v %= 16384;
 			return temp_read_buf;
 		}
 		if (reg_num == 4) {
@@ -456,9 +437,9 @@ public:
 				std::cout << "writing reg 2007 (ppudata): " << std::hex << (int)value << "row: " << row << ", col: " << col << "\n";
 			}
 			
-			WriteAddr(PPUAddr.address, value);
-			PPUAddr.address += (PPUregs.PPUFlags.PPUCTRL.VRAM_address_increment ? 32 : 1); //increment based on 0x2000
-			PPUAddr.address = PPUAddr.address % 0x4000;
+			WriteAddr(loopy_v, value);
+			loopy_v += (PPUregs.PPUFlags.PPUCTRL.VRAM_address_increment ? 32 : 1); //increment based on 0x2000
+			loopy_v = loopy_v % 0x4000;
 		}
 		else if (reg_num < 8) {
 			PPUregs.bytes[reg_num] = value;
