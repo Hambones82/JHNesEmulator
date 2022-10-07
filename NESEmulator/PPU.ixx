@@ -87,6 +87,15 @@ private:
 
 	Sprite current_row_sprites[8];
 	uint8_t current_row_sprite_counter = 0;
+	int spriteHeight = 8;
+	bool inYRange(const Sprite& oam) {
+		return !isUninit(oam) && ((row >= oam.y_pos) && (row < (oam.y_pos + spriteHeight)));
+	}
+
+	bool isUninit(const Sprite& sprite) {
+		return ((sprite.attributes == 0xFF) && (sprite.tile_index== 0xFF) && (sprite.x_pos == 0xFF) && (sprite.y_pos == 0xFF)) 
+			|| ((sprite.x_pos == 0) && (sprite.y_pos == 0) && (sprite.attributes== 0) && (sprite.tile_index== 0));
+	}
 
 	bool bg_opaque = false;
 	bool sprite_0_hit = false;
@@ -96,105 +105,6 @@ private:
 	uint16_t loopy_t = 0;
 	uint8_t loopy_x = 0;
 	bool address_latch = false; //loopy w
-
-	//background regs -- see https://www.nesdev.org/wiki/PPU_rendering
-	uint16_t pattern_table_16_1;//16 bits to handle scrolling
-	uint16_t pattern_table_16_2;
-
-	uint16_t pallette_attr_16;
-
-	//need to set bg opaque
-	Color GetBGColor() { //can probably eliminate the in values and just use col/row...
-		bg_opaque = false;
-		
-		uint8_t bit_pos = (15 - ((col % 8) + loopy_x));
-
-		uint8_t tile_x = loopy_v & 0x03E0;
-		uint8_t tile_y = loopy_v & 0x001F;
-
-		uint8_t block_x = (tile_x) / 4;
-		uint8_t block_y = (tile_y) / 4;
-
-		uint8_t quad_index_x = (tile_x % 4) / 2;
-		uint8_t quad_index_y = (tile_y % 4) / 2;
-
-		uint8_t attr_byte_index = (quad_index_x % 2) + (quad_index_y % 2) * 2;
-		uint8_t attr_byte_mask = 0xC0 >> ((3-attr_byte_index)*2);
-
-		uint8_t attr = (attr_byte_mask & pallette_attr_16) >> ((attr_byte_index)*2); //portion of lookup to pallette ram
-		
-		uint8_t lsbit = (pattern_table_16_1 & (1 << (bit_pos))) >> bit_pos;
-		uint8_t msbit = (pattern_table_16_2 & (1 << (bit_pos))) >> bit_pos << 1;
-
-		bg_opaque = (lsbit || msbit);
-		
-		uint16_t pallette_addr = 0x3F00 + (attr << 2) + lsbit + msbit;
-
-		uint8_t pallette_index = ReadAddr(pallette_addr);
-
-		if (RenderingIsEnabled() &&
-			(col % 8) == 7 && ((col >= 2 && col <= 257) || (col >= 322 && col <= 337))) {
-			//fetch data into pattern regs
-			//std::cout << "updating pattern bytes\n";
-			//
-			uint16_t tile_addr = (loopy_v & 0x0FFF) + 0x2000;
-			//std::cout << "row: " << row << ", col: " << col << ", tile addr: " << std::hex << (int)tile_addr << "\n";
-			uint8_t tile_num = ReadAddr(tile_addr);//loopy_v points to name table...  use that...
-			//std::cout << "tile num: " << std::hex << (int)tile_num << "\n";
-			//get pattern table data...
-			uint8_t tile_num_row = tile_num / 16;
-			uint8_t tile_num_col = tile_num % 16;
-
-			uint16_t tile_side = (uint16_t)(PPUregs.PPUFlags.PPUCTRL.Background_pattern_table_address) << 12;
-			uint16_t fetch_address = (tile_num_row << 8) + (tile_num_col << 4) + (row % 8) + tile_side;
-			fetch_address &= 0x3FFF; //??
-			uint16_t fetch_address_1 = fetch_address + 8;
-			fetch_address_1 &= 0x3FFF; //??
-
-			uint8_t plane_1_byte = ReadAddr(fetch_address);
-			uint8_t plane_2_byte = ReadAddr(fetch_address_1);
-
-			pattern_table_16_1 = pattern_table_16_1 >> 8;
-			pattern_table_16_1 |= (uint16_t)(plane_1_byte) << 8; //this is bit 1 of the pallette index
-			pattern_table_16_2 = pattern_table_16_2 >> 8;
-			pattern_table_16_2 |= (uint16_t)(plane_2_byte) << 8; //this is bit 0 of the pallette index
-
-			pallette_attr_16 >>= 8;
-			pallette_attr_16 |= ReadAddr(0x23C0 | (loopy_v & 0x0C00) | ((loopy_v >> 4) & 0x38) | ((loopy_v >> 2) & 0x07));
-		}
-
-		return MasterPallette[pallette_index];
-	}
-	
-	uint8_t GetPalletteIndex(uint8_t tile_num, uint8_t row_offset, uint8_t col_offset, uint8_t attr, bool bg, uint8_t side_select) {
-		uint8_t tile_num_row = tile_num / 16;
-		uint8_t tile_num_col = tile_num % 16;
-
-		uint16_t tile_side = (uint16_t)(side_select) << 12;
-		uint16_t fetch_address = (tile_num_row << 8) + (tile_num_col << 4) + (row_offset) + tile_side;
-		fetch_address &= 0x3FFF; //??
-		uint16_t fetch_address_1 = fetch_address + 8;
-		fetch_address_1 &= 0x3FFF; //??
-
-		uint8_t plane_1_byte = ReadAddr(fetch_address);
-		uint8_t plane_2_byte = ReadAddr(fetch_address_1);
-
-		uint8_t bit_pos = (7 - (col_offset));
-
-		uint8_t lsbit = (plane_1_byte & (1 << bit_pos)) >> bit_pos;
-		uint8_t msbit = (plane_2_byte & (1 << bit_pos)) >> bit_pos << 1;
-
-		if(bg) bg_opaque = (lsbit || msbit);
-		//if (bg_opaque) std::cout << "bg opaque";
-
-		if (!(lsbit | msbit) && !bg) return 0xFF; //if foreground and 00 index into pallette, return FF meaning transparent
-
-		uint16_t pallette_addr = (bg ? 0x3F00 : 0x3F10) + (attr << 2) + lsbit + msbit;
-
-		uint8_t pallette_index = ReadAddr(pallette_addr);
-
-		return pallette_index;
-	}
 
 	int sprite_0_in_current_row = -1;
 	int test_ctr = 0;
@@ -286,14 +196,14 @@ private:
 		}
 		
 		//Sprites
-		/*
+		
 		uint8_t spritePixel1 = 0;
 		uint8_t spritePixel2 = 0;
-		u8 spritePixel3 = 0;
-		u8 spritePixel4 = 0;
-		u8 spriteBit12 = 0;
+		uint8_t spritePixel3 = 0;
+		uint8_t spritePixel4 = 0;
+		uint8_t spriteBit12 = 0;
 		
-		u8 spritePaletteIndex = 0;
+		uint8_t spritePaletteIndex = 0;
 		bool showSprite = false;
 		bool spriteFound = false;
 
@@ -311,12 +221,13 @@ private:
 				spriteBit12 = (spritePixel2 >> 6) | (spritePixel1 >> 7);
 
 				//Sprite zero hit
-				if (!ppustatus.spriteZeroHit && spriteBit12 && bgBit12 && sprite.id == 0 && ppumask.showSprites && ppumask.showBg && dot < 256) {
-					ppustatus.val |= 64;
+				if (!PPUregs.PPUFlags.PPUSTATUS.sprite_0_hit && spriteBit12 && bgBit12 && sprite.id == 0 
+					&& PPUregs.PPUFlags.MASK.Show_sprites && PPUregs.PPUFlags.MASK.Show_background && col < 256) {
+					PPUregs.PPUFlags.PPUSTATUS.sprite_0_hit = 1;
 				}
 
 				if (spriteBit12) {
-					showSprite = ((bgBit12 && !(sprite.attr & 32)) || !bgBit12) && ppumask.showSprites;
+					showSprite = ((bgBit12 && !(sprite.attr & 32)) || !bgBit12) && PPUregs.PPUFlags.MASK.Show_sprites;
 					spritePaletteIndex = 0x10 | (spritePixel4 << 2) | (spritePixel3 << 2) | spriteBit12;
 					spriteFound = true;
 				}
@@ -324,26 +235,26 @@ private:
 				sprite.shift();
 			}
 		}
-		*/
+		
 		//When bg rendering is off
 		if (!PPUregs.PPUFlags.MASK.Show_background) {
 			paletteIndex = 0;
 		}
 
-		uint8_t pindex = ReadAddr(0x3F00 | (paletteIndex)) % 64;
+		uint8_t pindex = ReadAddr(0x3F00 | (showSprite ? spritePaletteIndex : paletteIndex)) % 64;
 		//Handling grayscale mode
 		uint8_t p = PPUregs.PPUFlags.MASK.Greyscale ? (pindex & 0x30) : pindex;
 
 		//Dark border rect to hide seam of scroll, and other glitches that may occur
 		//comment out for now
-		/*
+		
 		if (col <= 9 || col>= 249 || row <= 7 || row >= 232) {
 			showSprite = false; //???
 			p = 13;
 		}
-		*/
+		
 		//return something?
-		return pindex; //i think this is true -- 
+		return p; //i think this is true -- 
 	}
 
 	inline void FetchTiles() {
@@ -388,6 +299,219 @@ private:
 			IncrementHorizontal();
 		}
 	}
+	int primaryOAMCursor=0, secondaryOAMCursor=0;
+	std::array<Sprite, 8> secondaryOAM;
+	Sprite tmpOAM;
+	int tmpOAM_id;
+	bool inRange = false;
+	int inRangeCycles = 8;
+	int secondaryOAMids[8];
+	uint16_t spritePatternLowAddr, spritePatternHighAddr;
+
+	struct SpriteRenderEntity {
+		uint8_t lo;
+		uint8_t hi;
+		uint8_t attr;
+		uint8_t counter;
+		uint8_t id;
+		bool flipHorizontally;
+		bool flipVertically;
+		int shifted = 0;
+
+		void shift() {
+			if (shifted == 8) {
+				return;
+			}
+
+			if (flipHorizontally) {
+				lo >>= 1;
+				hi >>= 1;
+			}
+			else {
+				lo <<= 1;
+				hi <<= 1;
+			}
+
+			shifted++;
+		}
+	};
+
+	std::vector<SpriteRenderEntity> spriteRenderEntities;
+	SpriteRenderEntity out;
+
+	uint16_t getSpritePatternAddress(Sprite sprite, bool flipVertically) {
+		uint16_t addr = 0;
+
+		int fineOffset = row - sprite.y_pos;
+
+		if (flipVertically) {
+			fineOffset = spriteHeight - 1 - fineOffset;
+		}
+
+		//By adding 8 to fineOffset we skip the high order bits
+		if (spriteHeight == 16 && fineOffset >= 8) {
+			fineOffset += 8;
+		}
+
+		if (spriteHeight == 8) {
+			addr = ((uint16_t)PPUregs.PPUFlags.PPUCTRL.Sprite_pattern_table_address << 12) |
+				((uint16_t)sprite.tile_index << 4) |
+				fineOffset;
+		}
+		else {
+			addr = (((uint16_t)sprite.tile_index& 1) << 12) |
+				((uint16_t)((sprite.tile_index& ~1) << 4)) |
+				fineOffset;
+		}
+
+		return addr;
+	}
+
+	void EvalSprites() {
+		//clear secondary OAM
+		if (col >= 1 && col <= 64) {
+			if (col == 1) {
+				secondaryOAMCursor = 0;
+			}
+
+			secondaryOAM[secondaryOAMCursor].attributes = 0xFF;
+			secondaryOAM[secondaryOAMCursor].tile_index = 0xFF;
+			secondaryOAM[secondaryOAMCursor].x_pos = 0xFF;
+			secondaryOAM[secondaryOAMCursor].y_pos = 0xFF;
+
+			if (col % 8 == 0) {
+				secondaryOAMCursor++;
+			}
+		}
+
+		//sprite eval
+		if (col >= 65 && col <= 256) {
+			//Init
+			if (col == 65) {
+				secondaryOAMCursor = 0;
+				primaryOAMCursor = 0;
+			}
+
+			if (secondaryOAMCursor == 8) {
+				//ppustatus |= 0x20;  //--??
+				return;
+			}
+
+			if (primaryOAMCursor == 64) {
+				return;
+			}
+
+			//odd cycle read
+			if ((col % 2) == 1) {
+				tmpOAM = OAM.sprites[primaryOAMCursor];
+
+				if (inYRange(tmpOAM)) {
+					inRangeCycles--;
+					inRange = true;
+				}
+				//even cycle write
+			}
+			else {
+				//tmpOAM is in range, write it to secondaryOAM
+				if (inRange) {
+					inRangeCycles--;
+
+					//copying tmpOAM in range is 8 cycles, 2 cycles otherwise
+					if (inRangeCycles == 0) {
+						primaryOAMCursor++;
+						secondaryOAMCursor++;
+						inRangeCycles = 8;
+						inRange = false;
+					}
+					else {
+						tmpOAM_id = primaryOAMCursor;
+						secondaryOAM[secondaryOAMCursor] = tmpOAM;
+						secondaryOAMids[secondaryOAMCursor] = tmpOAM_id;
+					}
+				}
+				else {
+					primaryOAMCursor++;
+				}
+			}
+		}
+
+		//Sprite fetches
+		if (col >= 257 && col <= 320) {
+			if (col == 257) {
+				secondaryOAMCursor = 0;
+				spriteRenderEntities.clear();
+			}
+
+			Sprite sprite = secondaryOAM[secondaryOAMCursor];
+
+			int cycle = (col - 1) % 8;
+
+			switch (cycle) {
+			case 0:
+			case 1:
+				if (!isUninit(sprite)) {
+					out = SpriteRenderEntity();
+				}
+
+				break;
+
+			case 2:
+				if (!isUninit(sprite)) {
+					out.attr = sprite.attributes;
+					out.flipHorizontally = sprite.attributes & 64;
+					out.flipVertically = sprite.attributes& 128;
+					out.id = secondaryOAMids[secondaryOAMCursor];
+				}
+				break;
+
+			case 3:
+				if (!isUninit(sprite)) {
+					out.counter = sprite.x_pos;
+				}
+				break;
+
+			case 4:
+				if (!isUninit(sprite)) {
+					spritePatternLowAddr = getSpritePatternAddress(sprite, out.flipVertically);
+					out.lo = ReadAddr(spritePatternLowAddr);
+				}
+				break;
+
+			case 5:
+				break;
+
+			case 6:
+				if (!isUninit(sprite)) {
+					spritePatternHighAddr = spritePatternLowAddr + 8;
+					out.hi = ReadAddr(spritePatternHighAddr);
+				}
+				break;
+
+			case 7:
+				if (!isUninit(sprite)) {
+					spriteRenderEntities.push_back(out);
+				}
+
+				secondaryOAMCursor++;
+				break;
+
+			default:
+				break;
+			}
+		}
+	}
+
+	inline void decrementSpriteCounters() {
+		if (!RenderingIsEnabled()) {
+			return;
+		}
+
+		for (auto& sprite : spriteRenderEntities) {
+			if (sprite.counter > 0) {
+				sprite.counter--;
+			}
+		}
+	}
 
 public:
 	void Tick() {
@@ -413,7 +537,7 @@ public:
 				renderOut->StartFrame();
 			}
 			if (row>= 0 && row <= 239) {
-				//evalSprites();
+				EvalSprites();
 			}
 
 			if (col == 257 && RenderingIsEnabled()) {
@@ -428,7 +552,7 @@ public:
 				if (row >= 0 && row <= 239) {
 					if (col >= 2 && col <= 257) {
 						if (row > 0) {
-							//DecrementSpriteCounters();
+							decrementSpriteCounters();
 						}
 						uint8_t bg_color = EmitPixel();//?
 						auto color = MasterPallette[bg_color];
@@ -659,7 +783,7 @@ public:
 			if (reg_write_debug_out) {
 				std::cout << "writing reg 2000: " << std::hex << (int)value << "row: " << row << ", col: " << col << "\n";
 			}
-			
+			spriteHeight = (value & 0x20) ? 16 : 8;
 			loopy_t &= 0xF3FF;
 			loopy_t |= uint16_t(value & 0x03) << 10;
 		}
