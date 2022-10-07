@@ -93,7 +93,7 @@ void tick() {
 }
 int last_cycle = 0;
 void NMI() {
-	std::cout << "nmi. pc: " << std::hex << regs.PC << " cycles since nmi : " << cycle - last_cycle << "\n";
+	//std::cout << "nmi. pc: " << std::hex << regs.PC << " cycles since nmi : " << cycle - last_cycle << "\n";
 	SetFlag(flag_interrupt_disable, 1);
 	uint16_t return_addr = regs.PC;
 	StackPushWord(return_addr);

@@ -97,7 +97,6 @@ public:
 			std::cout << std::flush;
 			frame_counter = 0;
 		}
-		//std::cout << "end frame\n";
 	}
 	void SetColor(int r, int g, int b, int a)
 	{
@@ -111,7 +110,7 @@ public:
 		//std::cout << "trying to draw pixel\n";
 		uint32_t color = ((currentR << 16) + (currentG << 8) + (currentB));
 		//if (color != 0) std::cout << color << "\n";
-		
+		if (x + y * 256 > 240 * 256) { std::cout << "draw out bounds error\n"; }
 		if (usebuffer1) {
 			obuffer1[x + y * 256] = color;
 		}

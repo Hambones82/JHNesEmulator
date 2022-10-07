@@ -281,7 +281,10 @@ private:
 		uint8_t bgBit12 = (pixel2 >> 14) | (pixel1 >> 15);
 
 		uint8_t paletteIndex = 0 | (pixel4 >> 12) | (pixel3 >> 13) | (pixel2 >> 14) | (pixel1 >> 15);
-
+		if (row == 0) {
+			//DisplayNT();
+		}
+		
 		//Sprites
 		/*
 		uint8_t spritePixel1 = 0;
@@ -378,9 +381,10 @@ private:
 		}
 		else if (cycle == 0) {
 			if (col == 256) {
+				//std::cout << "vert inc\n";
 				IncrementVertical();
 			}
-
+			//std::cout << "hor inc\n";
 			IncrementHorizontal();
 		}
 	}
@@ -405,14 +409,14 @@ public:
 					loopy_v |= (loopy_t & 0b0111'1011'1110'0000);
 				}
 			}
-			if (row == 0) {
+			if (row == 261 && col == 0) {
 				renderOut->StartFrame();
 			}
 			if (row>= 0 && row <= 239) {
 				//evalSprites();
 			}
 
-			if (col == 257) {
+			if (col == 257 && RenderingIsEnabled()) {
 				loopy_v &= 0b1111'1011'1110'0000;
 				loopy_v |= (loopy_t & 0b0000'0100'0001'1111);
 			}
@@ -452,7 +456,7 @@ public:
 
 				//flag for nmi
 				if (PPUregs.PPUFlags.PPUCTRL.Generate_NMI) {
-					std::cout << "set flag";
+					//std::cout << "set flag";
 					nmi_occurred = true; //?
 				}
 			}
@@ -470,7 +474,8 @@ public:
 		else {
 			col++;
 		}
-
+		//std::cout << "row: " << row << ", col: " << col << "\n";
+		/*
 		if (col == 0) {
 			
 			current_row_sprite_counter = 0;
@@ -485,12 +490,12 @@ public:
 				}
 			}
 		}
-		
+		*/
 
 
 
 
-		if ((col < max_draw_col) && (row < max_draw_row) || (row == 261)) {
+		//if ((col < max_draw_col) && (row < max_draw_row) || (row == 261)) {
 			//std::cout << "drawing pixel";
 			/*
 			if (PPUregs.PPUFlags.MASK.Show_background && ((col < max_draw_col) && (row < max_draw_row)) || row == 261) {
@@ -500,11 +505,12 @@ public:
 					renderOut->DrawPixel(col, row);
 				}
 			}*/
-			bool sprite_8x16 = PPUregs.PPUFlags.PPUCTRL.Sprite_size;
-			for (int i = 0; i < current_row_sprite_counter; i++) {
-				if ((current_row_sprites[i].x_pos > col - 8) &&
-					(current_row_sprites[i].x_pos <= col/* << (sprite_8x16 ? 1 : 0)*/)) {
-					uint8_t attr = current_row_sprites[i].attributes & 0x03;
+		
+		//	bool sprite_8x16 = PPUregs.PPUFlags.PPUCTRL.Sprite_size;
+		//	for (int i = 0; i < current_row_sprite_counter; i++) {
+		//		if ((current_row_sprites[i].x_pos > col - 8) &&
+		//			(current_row_sprites[i].x_pos <= col/* << (sprite_8x16 ? 1 : 0)*/)) {
+		/*			uint8_t attr = current_row_sprites[i].attributes & 0x03;
 					bool bottom_tile = (row - current_row_sprites[i].y_pos) >= 8;
 					uint8_t top_tile_num = current_row_sprites[i].tile_index;
 					uint8_t tile_num = (sprite_8x16 && bottom_tile)?top_tile_num+1:top_tile_num;
@@ -540,7 +546,7 @@ public:
 				}
 			}
 			//evaluate sprite, etc...
-		}
+		}*/
 		/*
 		else if ((row == 241) && (col == 1)) {
 			
@@ -589,7 +595,7 @@ public:
 		else return 0;
 	}
 
-	bool reg_write_debug_out = true;
+	bool reg_write_debug_out = false;
 
 	uint8_t temp_PPU_scroll_x = 0;
 	uint8_t temp_PPU_scroll_y = 0;
@@ -598,7 +604,8 @@ public:
 		if (reg_num == 5) {
 			if (reg_write_debug_out)
 			{
-				std::cout << "writing reg 2005 (scroll): " << std::hex << (int)value << "row: " << row << ", col: " << col << "\n";
+				std::cout << "writing reg 2005 (scroll): address: " 
+						  << std::hex << (int)value << "row: " << row << ", col: " << col << "\n";
 			}
 				
 			if (address_latch == 0) {
@@ -636,7 +643,9 @@ public:
 		else if (reg_num == 7) { //for accuracy, updates to this reg during rendering should increment y and x as indicated 
 								 //in https://www.nesdev.org/wiki/PPU_scrolling
 			if (reg_write_debug_out) {
-				std::cout << "writing reg 2007 (ppudata): " << std::hex << (int)value << "row: " << row << ", col: " << col << "\n";
+				std::cout << "status: " << std::hex << (int)PPUregs.bytes[0] << "\n";
+				std::cout << "writing reg 2007 (ppudata): address: " << std::hex << loopy_v << ", value: " 
+					<< std::hex << (int)value << "row: " << row << ", col: " << col << "\n";
 			}
 			
 			WriteAddr(loopy_v, value);
@@ -659,6 +668,7 @@ public:
 	bool GetNMI() {
 		uint8_t retval = (nmi_occurred);
 		if (retval) {
+			//std::cout << "nmi\n";
 			nmi_occurred = false;
 		}
 		return retval;
