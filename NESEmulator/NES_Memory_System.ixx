@@ -9,6 +9,7 @@
 import PPU;
 import NESIO;
 import CartridgeMem;
+import APU;
 export module NES_Memory_System;
 
 const uint16_t banks_in_addr_space = UINT16_MAX +1 / bank_size;
@@ -32,6 +33,7 @@ export class NES_Memory_System
 private:
 	PPU* ppu;
 	NESIO* nesIO;
+	APU* apu;
 	std::array<uint8_t, 65536> RAM = { 0 };
 	//std::array<uint8_t, 1024> NameTable1 = { 0 };
 	//std::array<uint8_t, 1024> NameTable2 = { 0 };
@@ -50,10 +52,13 @@ private:
 			ppu->WriteReg(address & 0x0007, data);
 		}
 		else if (address == 0x4014) { //?????
-			//OAM DMA
+			//OAM DMA -- ???  I think this is handled in the CPU???
 		}
 		else if (address == 0x4016) {
 			nesIO->writeIOReg(IOReg::reg4016, data);//initialize controller input read
+		}
+		else if ((address >= 0x4000 && address <= 0x4013) || address == 0x4015 || address == 0x4017) {
+			apu->WriteReg(address, data);
 		}
 		else {
 			PRGROM.WriteROM(address, data);
@@ -139,9 +144,10 @@ public:
 	//ppu map, ppu fetch functions
 	//maybe we could start off with a pattern rom viewer.  that'd probably 
 	
-	NES_Memory_System(PPU* in_PPU, NESIO* in_nesIO) {
+	NES_Memory_System(PPU* in_PPU, NESIO* in_nesIO, APU* in_apu) {
 		ppu = in_PPU;
 		nesIO = in_nesIO;
+		apu = in_apu;
 	}
 
 	bool GetNMI() {

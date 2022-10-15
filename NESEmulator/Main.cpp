@@ -7,7 +7,10 @@ import PPU;
 import MasterClock;
 import PlatformIO;
 import NESIO;
+import APU;
+import AudioDriver;
 
+#include <thread>
 #include <memory>
 #include <iostream>
 #include <SDL.h>
@@ -22,12 +25,15 @@ int main(int argc, char* args[])
 	std::ios_base::sync_with_stdio(false);
 	SDL_Init(SDL_INIT_EVERYTHING);
 
+	AudioDriver audioDriver;
+	APU apu(&audioDriver);
+	std::thread audio_thread(&AudioThread, &audioDriver);
 	RenderingWindow nesRenderer{};
 	//RenderingWindow patternTablewindow{};
 	PPU ppu(&nesRenderer);
 	PlatformIO platformIO;
 	NESIO nesIO{ &platformIO };
-	NES_Memory_System memory{&ppu, &nesIO};
+	NES_Memory_System memory{&ppu, &nesIO, &apu};
 	ppu.SetMemorySystem(&memory);
 	MasterClock masterClock(&ppu);
 	

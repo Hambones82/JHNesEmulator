@@ -1,45 +1,28 @@
+#include <assert.h>
 #include <sdl.h>
 #include <iostream>
 #include <vector>
 #include <string>
 #include <array>
 #include <sstream>
+#include <chrono>
+#include <mutex>
 
 export module AudioDriver;
+import APUData;
 
-
-const int AUDIO_BUFFER_SIZE = 4000; //in samples
+const int AUDIO_BUFFER_SIZE = 1; //in samples
 float TEMPO = 180; //beats per minute
 float SAMPLES_PER_SECOND = 44100.0;
 float SILENCE = 0.0;
-
-int audio_index = 0;
 
 //this needs to be rewritten...
 //playback for device
 
 void PlayAudio(void* userData, Uint8* stream, int len) {
 
-    int audio_index = *(int*)userData;
-    for (int i = 0; i < len; i++) {
-
-        audio_index++;
-
-        float sin_param_c = (((float)audio_index / 44000.0) * 261.62 * 1.0 * M_PI);
-
-        float sin_param_e = (((float)audio_index / 44000.0) * 329.628 * 2.0 * M_PI);
-
-        float sin_param_g = (((float)audio_index / 44000.0) * 391.995 * 4.0 * M_PI);
-
-        float sin_param_top_c = (((float)audio_index / 44000.0) * 261.62 * 8.0 * M_PI);
-
-        Uint8 result = ((sin(sin_param_c) / 2.0 + .5) * 85) + ((sin(sin_param_e) / 2.0 + .5) * 85)
-            /* + ((sin(sin_param_g) / 2.0 + .5) * 65)*/ + ((sin(sin_param_top_c) / 2.0 + .5) * 85);
-
-        stream[i] = result;
-
-    }
-    *(int*)userData = audio_index;
+    //just feed back the last sample
+    *stream = *(Uint8*)userData;
 
 }
 //TODO:
@@ -47,8 +30,8 @@ void PlayAudio(void* userData, Uint8* stream, int len) {
 //something w phase?
 //current state of voice?
 
-enum class Instrument { square1, square2, triangle };
-enum class VoiceOp { start, stop };
+export enum class Instrument { square1, square2, triangle };
+export enum class VoiceOp { start, stop };
 
 struct VoiceCommand {
 private:
@@ -158,6 +141,7 @@ private:
 public:
     void DoCommand(std::unique_ptr<VoiceCommand> voiceCommand) {
         std::vector<std::unique_ptr<VoiceCommand>>::iterator it;
+        //std::cout << "voice command begin\n";
         if (track.size() == 0) {
             track.push_back(std::move(voiceCommand));
             return;
@@ -178,6 +162,7 @@ public:
             }
             track.push_back(std::move(voiceCommand));
         }
+        //std::cout << "voice command end\n";
     }
     //this might be unused...
     void FillWithSilence(std::array<float, AUDIO_BUFFER_SIZE>& out_buffer, int start_index, int end_index) {
@@ -188,6 +173,7 @@ public:
 
     //this is wrong... might also want to insert silence at the beginning of the track...
     float CurrentPhase() {
+        //std::cout << "current phase begin\n";
         auto note = track[current_note_track_index].get();
 
         float raw_phase = current_note_start_phase +
@@ -199,6 +185,7 @@ public:
         {
             std::cout << "phase is out of bounds: " << result << "\n";
         }
+        //std::cout << "current phase end\n";
         return raw_phase - (int)raw_phase;
     }
 
@@ -222,9 +209,12 @@ public:
                 out_buffer[i] = CurrentNoteSample();
             }
             //if there is a next note and that note is prior to the current time index, set to next note, get sample
-            else if (track[current_note_track_index + 1].get()->GetStartTimeIndex() <= current_time_index) { //this never happens -- not sure why
+            //***THE WHILE LOOP ADVANCES TO THE LAST NOTE THAT IS NOT SUBSEQUENT TO THE CURRENT TIME***//
+            else if (track[current_note_track_index + 1].get()->GetStartTimeIndex() <= current_time_index) { 
                 current_note_start_phase = CurrentPhase();//in waveforms
-                current_note_track_index++;
+                while (track[current_note_track_index + 1].get()->GetStartTimeIndex() <= current_time_index) {
+                    current_note_track_index++;
+                }
                 out_buffer[i] = CurrentNoteSample();
             }
             //if there is a next note but it's later than now, continue with current note
@@ -251,19 +241,56 @@ public:
     }
 };
 
-class Score {
-public:
+export class AudioDriver {
+private:
+    std::mutex access_mutex;
+    SDL_AudioSpec got_spec;
+    SDL_AudioDeviceID device;
+    std::chrono::system_clock::time_point start_time;
     Voice triangle{ Instrument::triangle };
     Voice square1{ Instrument::square1 };
     Voice square2{ Instrument::square2 };
     int sampleRate;//expressed as frequency in Hz
-
+    Uint8 last_sample;
+    float TimeSinceStart() /*in beats*/ {
+        auto now = std::chrono::system_clock::now();
+        auto time_since_start = now - start_time;
+        auto seconds_since_start = std::chrono::duration_cast<std::chrono::seconds>(time_since_start);
+        float current_beat = (seconds_since_start.count() / 60.) * TEMPO;
+        return current_beat;
+    }
 public:
+    SDL_AudioDeviceID GetDeviceID() {
+        return device;
+    }
+    AudioDriver() {
+        start_time = std::chrono::system_clock::now();//so darn complicated...
+        if (SDL_Init(SDL_INIT_AUDIO) != 0) {
+            std::cout << "error initializing audio: ";
+            std::cout << SDL_GetError() << "\n";
+        }
+        SDL_AudioSpec want_spec;
+        want_spec.freq = SAMPLES_PER_SECOND;
+        want_spec.format = AUDIO_U16;
+        want_spec.channels = 1;
+        want_spec.samples = 4096;
+        want_spec.callback = PlayAudio;
+        want_spec.userdata = &last_sample;
+        
+        device = SDL_OpenAudioDevice(NULL, 0, &want_spec, &got_spec, 0);
+        SDL_PauseAudioDevice(device, 0);
+    }
     void DoVoiceCommand(float freq, float time, VoiceOp op, Instrument instrument) {
         DoVoiceCommand(std::make_unique<VoiceCommand>(freq, time, op, instrument));
     }
 
+    void DoVoiceCommand(float freq, VoiceOp op, Instrument instrument) {
+        DoVoiceCommand(freq, TimeSinceStart(), op, instrument);
+    }
+
     void DoVoiceCommand(std::unique_ptr<VoiceCommand> voiceCommand) {
+        access_mutex.lock();
+        //std::cout << "do voice command start\n";
         switch (voiceCommand->GetInstrument()) {
         case Instrument::triangle:
             triangle.DoCommand(std::move(voiceCommand));
@@ -275,6 +302,9 @@ public:
             square2.DoCommand(std::move(voiceCommand));
             break;
         }
+        //std::cout << "do voice command end\n";
+        access_mutex.unlock();
+        //std::cout << "score: " << ToString();
     }
 
     float Mix(float triangle, float square1, float square2) {
@@ -285,12 +315,16 @@ public:
     std::array<float, AUDIO_BUFFER_SIZE> square2_buffer;
     //returns a normalized amplitude from 0.0 to 1.0
     void GetSamples(std::array<float, AUDIO_BUFFER_SIZE>& out_buffer) {
+        access_mutex.lock();
+        //std::cout << "start getting samples\n";
         triangle.GetNextSamples(triangle_buffer);
         square1.GetNextSamples(square1_buffer);
         square2.GetNextSamples(square2_buffer);
         for (int i = 0; i < AUDIO_BUFFER_SIZE; i++) {
             out_buffer[i] = Mix(triangle_buffer[i], square1_buffer[i], square2_buffer[i]);
         }
+        //std::cout << "end getting samples\n";
+        access_mutex.unlock();
     }
 
     std::string ToString() {
@@ -363,20 +397,26 @@ public:
     }
 };
 
-template <int size, typename T>
-void ReadAndPrintBuffer(AudioBuffer<size, T>& audioBuffer, int len) {
-    for (int i = 0; i < len; i++) {
-        std::cout << "Read " << audioBuffer.Read() << "\n";
+export void AudioThread(AudioDriver *audioDriver) {
+    auto start_time = std::chrono::system_clock::now();
+    std::chrono::duration<float>  sample_time_increment{ 1. / SAMPLES_PER_SECOND };
+    //auto sample_time_increment = ;
+    auto current_time = std::chrono::system_clock::now();
+    std::array<float, 1> sample_buffer = {SILENCE};
+    //int sample_counter = 0;
+    while (true) {
+        current_time = std::chrono::system_clock::now();
+        if (current_time - start_time > sample_time_increment) {
+            /*
+            sample_counter++;
+            if (sample_counter >= SAMPLES_PER_SECOND) {
+                std::cout << "samples: " << sample_counter << "\n";
+                sample_counter -= SAMPLES_PER_SECOND;
+            }*/
+            audioDriver->GetSamples(sample_buffer);
+            SDL_QueueAudio(audioDriver->GetDeviceID(), sample_buffer.data(), AUDIO_BUFFER_SIZE);
+            //std::cout << "sample: " << sample_buffer[0] << "\n";
+            start_time = std::chrono::system_clock::now();//???
+        }
     }
-}
-
-template <int size, typename T>
-void WriteBuffer(AudioBuffer<size, T>& audioBuffer, std::vector<int> args) {
-    for (int& i : args) {
-        audioBuffer.Write(i);
-    }
-}
-
-void AudioThread() {
-
 }
