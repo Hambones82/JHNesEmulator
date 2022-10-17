@@ -24,7 +24,13 @@ private:
 	AudioDriver* audioDriver;
 
 	void SetDriverFreq(uint16_t timer, Instrument instrument) {
-		audioDriver->DoVoiceCommand(1789773. / (16 * (timer + 1)), VoiceOp::start, instrument);
+		float new_freq = 1789773. / (16 * (timer + 1));
+		if ((new_freq >= 20) && (new_freq < 14000)) {
+			audioDriver->DoVoiceCommand(new_freq, VoiceOp::start, instrument);
+		}
+		else {
+			audioDriver->DoVoiceCommand(0, VoiceOp::stop, instrument);
+		}
 	}
 	void SetSquareData_0_reg(SquareData& inSquareData, uint8_t value) {
 		inSquareData.duty_cycle = value & 0b1100'0000 >> 6;
@@ -43,14 +49,23 @@ private:
 	void SetSquareData_2_reg(SquareData& inSquareData, uint8_t value) {
 		inSquareData.timer &= 0xFF00;
 		inSquareData.timer |= value;
-		SetDriverFreq(apuData.square1Data.timer, Instrument::square1);
 	}
 
 	void SetSquareData_3_reg(SquareData& inSquareData, uint8_t value) {
 		inSquareData.length_counter = (value & 0b1111'1000) >> 3;
 		inSquareData.timer &= 0x00FF;
 		inSquareData.timer |= (value & 0b0000'0111) << 8;
-		SetDriverFreq(apuData.square1Data.timer, Instrument::square1);
+	}
+	void SetTriData_8_reg(TriangleData& inTriData, uint8_t value) {
+
+	}
+	void SetTriData_A_reg(TriangleData& inTriData, uint8_t value) {
+		inTriData.timer &= 0xFF00;
+		inTriData.timer |= value;
+	}
+	void SetTriData_B_reg(TriangleData& inTriData, uint8_t value) {
+		inTriData.timer &= 0x00FF;
+		inTriData.timer |= ((uint16_t)value & 0x07) << 8;
 	}
 public:
 	//for now, just try setting frequency, have the audio driver play samples based on the set freq.
@@ -78,9 +93,11 @@ public:
 			break;
 		case 0x4002:
 			SetSquareData_2_reg(apuData.square1Data, val);
+			SetDriverFreq(apuData.square1Data.timer, Instrument::square1);
 			break;
 		case 0x4003:
 			SetSquareData_3_reg(apuData.square1Data, val);
+			SetDriverFreq(apuData.square1Data.timer, Instrument::square1);
 			break;
 		case 0x4004:
 			SetSquareData_0_reg(apuData.square2Data, val);
@@ -90,9 +107,23 @@ public:
 			break;
 		case 0x4006:
 			SetSquareData_2_reg(apuData.square2Data, val);
+			SetDriverFreq(apuData.square2Data.timer, Instrument::square2);
 			break;
 		case 0x4007:
 			SetSquareData_3_reg(apuData.square2Data, val);
+			SetDriverFreq(apuData.square2Data.timer, Instrument::square2);
+			break;
+		case 0x4008:
+			break;
+		case 0x4009:
+			break;
+		case 0x400A:
+			SetTriData_A_reg(apuData.triangleData, val);
+			SetDriverFreq(apuData.triangleData.timer, Instrument::triangle);
+			break;
+		case 0x400B:
+			SetTriData_B_reg(apuData.triangleData, val);
+			SetDriverFreq(apuData.triangleData.timer, Instrument::triangle);
 			break;
 		}
 		//whenever there is an update to necessary parameters, do that update.

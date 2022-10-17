@@ -22,8 +22,17 @@ export struct SquareData {
 	uint8_t shift_counter = 0;
 };
 
+export struct TriangleData {
+	bool has_changed = false;
+
+	bool length_counter_halt;
+	uint8_t linear_counter_reload;
+	uint16_t timer;
+	uint8_t length_counter_load;
+};
+
 export struct APUData {
 	SquareData square1Data;
 	SquareData square2Data;
-	//triangle data
+	TriangleData triangleData;
 };

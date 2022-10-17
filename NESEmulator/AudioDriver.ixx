@@ -11,17 +11,20 @@
 export module AudioDriver;
 import APUData;
 
-const int AUDIO_BUFFER_SIZE = 1; //in samples
-float TEMPO = 180; //beats per minute
-float SAMPLES_PER_SECOND = 44100.0;
+const int AUDIO_BUFFER_SIZE = 2000; //in samples
+float TEMPO = 168; //beats per minute
+const float SAMPLES_PER_SECOND = 44100.0;
+const int SAMPLES_PER_SECOND_INT = 44100;
 float SILENCE = 0.0;
 
 //this needs to be rewritten...
 //playback for device
 
+
 void PlayAudio(void* userData, Uint8* stream, int len) {
 
     //just feed back the last sample
+ 
     *stream = *(Uint8*)userData;
 
 }
@@ -205,16 +208,22 @@ public:
         for (int i = 0; i < AUDIO_BUFFER_SIZE; i++) {
             current_time_index++;
             //if we have no more note data, continue the note
-            if (current_note_track_index == track.size() - 1) {
+            if (current_note_track_index == track.size() - 1) {//the last note
                 out_buffer[i] = CurrentNoteSample();
             }
             //if there is a next note and that note is prior to the current time index, set to next note, get sample
-            //***THE WHILE LOOP ADVANCES TO THE LAST NOTE THAT IS NOT SUBSEQUENT TO THE CURRENT TIME***//
+            //***THE WHILE LOOP ADVANCES TO THE FIRST NOTE THAT IS AFTER TO THE CURRENT TIME***//
             else if (track[current_note_track_index + 1].get()->GetStartTimeIndex() <= current_time_index) { 
-                current_note_start_phase = CurrentPhase();//in waveforms
-                while (track[current_note_track_index + 1].get()->GetStartTimeIndex() <= current_time_index) {
+                while (current_note_track_index + 1 < track.size() - 1) {
                     current_note_track_index++;
+                    if (!(track[current_note_track_index + 1].get()->GetStartTimeIndex() <= current_time_index)) {
+                        break;
+                    }
+                    else {
+                        int j = 0;
+                    }
                 }
+                current_note_start_phase = CurrentPhase();//in waveforms
                 out_buffer[i] = CurrentNoteSample();
             }
             //if there is a next note but it's later than now, continue with current note
@@ -255,8 +264,8 @@ private:
     float TimeSinceStart() /*in beats*/ {
         auto now = std::chrono::system_clock::now();
         auto time_since_start = now - start_time;
-        auto seconds_since_start = std::chrono::duration_cast<std::chrono::seconds>(time_since_start);
-        float current_beat = (seconds_since_start.count() / 60.) * TEMPO;
+        auto milliseconds_since_start = std::chrono::duration_cast<std::chrono::milliseconds>(time_since_start);
+        float current_beat = (milliseconds_since_start.count() / 60000.) * TEMPO;
         return current_beat;
     }
 public:
@@ -271,11 +280,11 @@ public:
         }
         SDL_AudioSpec want_spec;
         want_spec.freq = SAMPLES_PER_SECOND;
-        want_spec.format = AUDIO_U16;
+        want_spec.format = AUDIO_U8;
         want_spec.channels = 1;
-        want_spec.samples = 4096;
-        want_spec.callback = PlayAudio;
-        want_spec.userdata = &last_sample;
+        want_spec.samples = AUDIO_BUFFER_SIZE;
+        want_spec.callback = NULL;
+        //want_spec.userdata = &last_sample;
         
         device = SDL_OpenAudioDevice(NULL, 0, &want_spec, &got_spec, 0);
         SDL_PauseAudioDevice(device, 0);
@@ -308,7 +317,7 @@ public:
     }
 
     float Mix(float triangle, float square1, float square2) {
-        return triangle * .66 + square1 * .16 + square2 * .16;
+        return /*triangle * .66 + */square1;// *.16; //+ square2 * .16;
     }
     std::array<float, AUDIO_BUFFER_SIZE> triangle_buffer;
     std::array<float, AUDIO_BUFFER_SIZE> square1_buffer;
@@ -316,14 +325,12 @@ public:
     //returns a normalized amplitude from 0.0 to 1.0
     void GetSamples(std::array<float, AUDIO_BUFFER_SIZE>& out_buffer) {
         access_mutex.lock();
-        //std::cout << "start getting samples\n";
         triangle.GetNextSamples(triangle_buffer);
         square1.GetNextSamples(square1_buffer);
         square2.GetNextSamples(square2_buffer);
         for (int i = 0; i < AUDIO_BUFFER_SIZE; i++) {
             out_buffer[i] = Mix(triangle_buffer[i], square1_buffer[i], square2_buffer[i]);
         }
-        //std::cout << "end getting samples\n";
         access_mutex.unlock();
     }
 
@@ -397,26 +404,33 @@ public:
     }
 };
 
+std::vector<float> samples;
+bool log_samples = false;
 export void AudioThread(AudioDriver *audioDriver) {
     auto start_time = std::chrono::system_clock::now();
-    std::chrono::duration<float>  sample_time_increment{ 1. / SAMPLES_PER_SECOND };
-    //auto sample_time_increment = ;
+    //std::chrono::duration<float>  sample_time_increment{ (float)AUDIO_BUFFER_SIZE / (float)SAMPLES_PER_SECOND };
+    std::chrono::duration<int, std::ratio<AUDIO_BUFFER_SIZE, SAMPLES_PER_SECOND_INT * 2>> sample_increment{ 1 };
     auto current_time = std::chrono::system_clock::now();
-    std::array<float, 1> sample_buffer = {SILENCE};
-    //int sample_counter = 0;
+    std::array<float, AUDIO_BUFFER_SIZE> float_sample_buffer = {SILENCE};
+    std::array<uint8_t, AUDIO_BUFFER_SIZE> out_sample_buffer;
+    //int second_counter = 0;
+    bool samples_set = false;
     while (true) {
         current_time = std::chrono::system_clock::now();
-        if (current_time - start_time > sample_time_increment) {
-            /*
-            sample_counter++;
-            if (sample_counter >= SAMPLES_PER_SECOND) {
-                std::cout << "samples: " << sample_counter << "\n";
-                sample_counter -= SAMPLES_PER_SECOND;
-            }*/
-            audioDriver->GetSamples(sample_buffer);
-            SDL_QueueAudio(audioDriver->GetDeviceID(), sample_buffer.data(), AUDIO_BUFFER_SIZE);
-            //std::cout << "sample: " << sample_buffer[0] << "\n";
-            start_time = std::chrono::system_clock::now();//???
+        if (current_time - start_time >= 2 * sample_increment) {
+            SDL_QueueAudio(audioDriver->GetDeviceID(), out_sample_buffer.data(), AUDIO_BUFFER_SIZE);
+            start_time = std::chrono::system_clock::now();
+            samples_set = false;
+        }
+        else if (current_time - start_time >= sample_increment) {
+            if (samples_set == false) {
+                audioDriver->GetSamples(float_sample_buffer);
+                for (int i = 0; i < AUDIO_BUFFER_SIZE; i++) {
+                    out_sample_buffer[i] = float_sample_buffer[i] * 255;
+                    if (log_samples) samples.push_back(out_sample_buffer[i]);
+                }
+                samples_set = true;
+            }
         }
     }
 }
