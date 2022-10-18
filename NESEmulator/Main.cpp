@@ -46,7 +46,7 @@ int main(int argc, char* args[])
 	//std::cout << NES_ROM_header.bytes[0] << NES_ROM_header.bytes[1] << NES_ROM_header.bytes[2] << "\n";
 
 	int y_offset = 1;
-
+	audioDriver.Reset();
 	while (true) {
 		SDL_Event event;
 		while (SDL_PollEvent(&event)) {  // poll until all events are handled!

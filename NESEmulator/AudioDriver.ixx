@@ -179,7 +179,7 @@ private:
     int current_time_index = 0;
     float current_note_start_phase = 0; //0.0 to 1.0
     int current_note_track_index = 0; //oh yeah, because we have stops...
-    int current_volume_track_index = 0;
+    int current_volume_track_index = 0; //need to insert a volume command to set volume to 1.0
     
 public:
     void DoCommand(std::unique_ptr<VoiceCommand> voiceCommand) {
@@ -248,41 +248,35 @@ public:
         debug_count_total_samples+= AUDIO_SAMPLE_CHUNK;
         for (int i = 0; i < AUDIO_SAMPLE_CHUNK; i++) {
             current_time_index++;
-            //if we have no more note data, continue the note
-            if (current_note_track_index == track.size() - 1) {//the last note
+            int latest_index = current_note_track_index > current_volume_track_index ? current_note_track_index : current_volume_track_index;
+            if ((current_note_track_index == track.size() - 1)
+                || (track[current_note_track_index + 1]->GetStartTimeIndex() > current_time_index)) {//the last note
                 out_buffer[i] = CurrentNoteSample();
             }
-            //if there is a next note and that note is prior to the current time index, set to next note, get sample
-            //***THE WHILE LOOP ADVANCES TO THE FIRST NOTE THAT IS AFTER TO THE CURRENT TIME***//
-            else if (track[current_note_track_index + 1]->GetStartTimeIndex() <= current_time_index) { 
-                int note_index_search = current_note_track_index + 1;
-                bool found_next_note = false;// (track[note_index_search]->GetOp()) != (VoiceOp::volume);
+            else if (track[latest_index + 1]->GetStartTimeIndex() <= current_time_index) { 
+                int note_index_search = latest_index + 1;
+                //bool found_next_note = false;// (track[note_index_search]->GetOp()) != (VoiceOp::volume);
                 while (note_index_search < track.size()) {
-                    if (note_index_search == track.size() - 1 &&
-                        track[note_index_search]->GetStartTimeIndex() <= current_time_index ) {
-                        found_next_note = (track[note_index_search]->GetOp()) != (VoiceOp::volume);
+                    if (track[note_index_search]->GetStartTimeIndex() > current_time_index) { //if next note is later than now, get out of here
                         break;
                     }
-                    else if ((track[note_index_search]->GetStartTimeIndex() <= current_time_index) &&
-                             track[note_index_search]->GetOp() != VoiceOp::volume) {
-                        found_next_note = true;
-                        //!(track[note_index_search]->GetStartTimeIndex() <= current_time_index) && ) {
+                    else if (track[note_index_search]->GetOp() != VoiceOp::volume) {//if next note is less than now, and is play note, 
+                        current_note_track_index = note_index_search;               //update current note index
+                    }
+                    else if (track[note_index_search]->GetOp() == VoiceOp::volume) {//if next note is less than now and is volume, upd vol
+                        current_volume_track_index = note_index_search;
+                    }
+                    else if(note_index_search == track.size() - 1) {//if the next note is the last note, we must break or get an array oob
                         break;
                     }
                     note_index_search++;
                 }
-                //current_note_start_phase = CurrentPhase();//in waveforms
-                if (found_next_note) {
-                    current_note_track_index = note_index_search;
-                }
+                
                 out_buffer[i] = CurrentNoteSample();
             }
             //if there is a next note but it's later than now, continue with current note
-            else if (track[current_note_track_index + 1]->GetStartTimeIndex() > current_time_index) {
-                out_buffer[i] = CurrentNoteSample();
-            }
             else {
-                std::cout << "This should not occur -- this is a sample acquisition case that has not been considered\n";
+                std::cout << "unhandled case in GetNextSamples()";
             }
         }
         if (debug_count_total_samples >= SAMPLES_PER_SECOND_INT) {
@@ -325,6 +319,9 @@ public:
     AudioBufferData aBufferData;
     SDL_AudioDeviceID GetDeviceID() {
         return device;
+    }
+    void Reset() {
+        start_time = std::chrono::system_clock::now();//so darn complicated...
     }
     AudioDriver() {
         start_time = std::chrono::system_clock::now();//so darn complicated...
