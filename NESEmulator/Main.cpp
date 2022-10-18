@@ -35,7 +35,7 @@ int main(int argc, char* args[])
 	NESIO nesIO{ &platformIO };
 	NES_Memory_System memory{&ppu, &nesIO, &apu};
 	ppu.SetMemorySystem(&memory);
-	MasterClock masterClock(&ppu);
+	MasterClock masterClock(&ppu, &apu);
 	
 	NESCPU cpu{ &memory , &masterClock};
 	NESROMLoader::LoadRomFile(R"(C:\Users\Josh\source\NESEmulator\Roms\SuperMarioBros.nes)", &memory);

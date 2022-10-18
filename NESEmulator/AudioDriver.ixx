@@ -11,21 +11,56 @@
 export module AudioDriver;
 import APUData;
 
-const int AUDIO_BUFFER_SIZE = 2000; //in samples
+const int AUDIO_BUFFER_SIZE = 300; //in samples
+const int AUDIO_SAMPLE_CHUNK = 10;
 float TEMPO = 168; //beats per minute
 const float SAMPLES_PER_SECOND = 44100.0;
 const int SAMPLES_PER_SECOND_INT = 44100;
 float SILENCE = 0.0;
+int AudioBitDepth = 256;
+
+class AudioBufferData {
+public:
+    std::array<std::array<int, AUDIO_BUFFER_SIZE>, 2> callbackBuffers;
+    int nextBufferToWrite = 0; //0 or 1
+    int nextBufferToRead = 0; //0 or 1
+    std::array<bool, 2> bufferReadyToRead = { false, false };
+    std::array<bool, 2> bufferReadyToWrite = { true, true };
+    
+    std::array<std::mutex, 2> audioBufferMutexes;
+    int lastSample = SILENCE * 256;
+};
 
 //this needs to be rewritten...
 //playback for device
 
-
+int fail_counter = 0;
 void PlayAudio(void* userData, Uint8* stream, int len) {
 
-    //just feed back the last sample
+    AudioBufferData* aBufferData = (AudioBufferData*)userData;
+    int readBuffer = aBufferData->nextBufferToRead;
+
+    if (!aBufferData->bufferReadyToRead[readBuffer]) {
+        for (int i = 0; i < len; i++) {
+            stream[i] = aBufferData->lastSample;
+        }
+        fail_counter++;
+    }
+    
+    else {
+        aBufferData->audioBufferMutexes[readBuffer].lock();
+        int i = 0;
+        for (i; i < len; i++) {
+            stream[i] = aBufferData->callbackBuffers[readBuffer][i];
+        }
+        aBufferData->lastSample = stream[i];
+        aBufferData->bufferReadyToWrite[readBuffer] = true;
+        aBufferData->bufferReadyToRead[readBuffer] = false;
+        aBufferData->nextBufferToRead = 1 - aBufferData->nextBufferToRead; 
+        aBufferData->audioBufferMutexes[readBuffer].unlock();
+    }
  
-    *stream = *(Uint8*)userData;
+    //need to signal that we've read the buffer and it can be used...
 
 }
 //TODO:
@@ -73,8 +108,10 @@ public:
         return retval; //time is in beats...
     }
 
+    int silences = 0;
     float GetSample(float phase) {
         if (voiceOp == VoiceOp::stop) {
+            silences++;
             return SILENCE;
         }
         else switch (instrument) {
@@ -203,9 +240,10 @@ public:
     //probably want a rewind to index thing...
 
     //i think we should advance to current time, placing all samples into an output buffer
-    void GetNextSamples(std::array<float, AUDIO_BUFFER_SIZE>& out_buffer) {
-
-        for (int i = 0; i < AUDIO_BUFFER_SIZE; i++) {
+    int debug_count_total_samples = 0;
+    void GetNextSamples(std::array<float, AUDIO_SAMPLE_CHUNK>& out_buffer) {
+        debug_count_total_samples+= AUDIO_SAMPLE_CHUNK;
+        for (int i = 0; i < AUDIO_SAMPLE_CHUNK; i++) {
             current_time_index++;
             //if we have no more note data, continue the note
             if (current_note_track_index == track.size() - 1) {//the last note
@@ -214,16 +252,16 @@ public:
             //if there is a next note and that note is prior to the current time index, set to next note, get sample
             //***THE WHILE LOOP ADVANCES TO THE FIRST NOTE THAT IS AFTER TO THE CURRENT TIME***//
             else if (track[current_note_track_index + 1].get()->GetStartTimeIndex() <= current_time_index) { 
-                while (current_note_track_index + 1 < track.size() - 1) {
+                while (current_note_track_index + 1 < track.size()) {
                     current_note_track_index++;
-                    if (!(track[current_note_track_index + 1].get()->GetStartTimeIndex() <= current_time_index)) {
+                    if (current_note_track_index == track.size() - 1) {
                         break;
                     }
-                    else {
-                        int j = 0;
+                    else if (!(track[current_note_track_index + 1].get()->GetStartTimeIndex() <= current_time_index)) {
+                        break;
                     }
                 }
-                current_note_start_phase = CurrentPhase();//in waveforms
+                //current_note_start_phase = CurrentPhase();//in waveforms
                 out_buffer[i] = CurrentNoteSample();
             }
             //if there is a next note but it's later than now, continue with current note
@@ -233,9 +271,11 @@ public:
             else {
                 std::cout << "This should not occur -- this is a sample acquisition case that has not been considered\n";
             }
-
         }
-
+        if (debug_count_total_samples >= SAMPLES_PER_SECOND_INT) {
+            std::cout << "current note index: " << current_note_track_index << "\n";
+            debug_count_total_samples -= SAMPLES_PER_SECOND;
+        }
     }
     Voice(Instrument in_instrument) {
         instrument = in_instrument;
@@ -269,6 +309,7 @@ private:
         return current_beat;
     }
 public:
+    AudioBufferData aBufferData;
     SDL_AudioDeviceID GetDeviceID() {
         return device;
     }
@@ -283,8 +324,8 @@ public:
         want_spec.format = AUDIO_U8;
         want_spec.channels = 1;
         want_spec.samples = AUDIO_BUFFER_SIZE;
-        want_spec.callback = NULL;
-        //want_spec.userdata = &last_sample;
+        want_spec.callback = PlayAudio;
+        want_spec.userdata = &aBufferData;
         
         device = SDL_OpenAudioDevice(NULL, 0, &want_spec, &got_spec, 0);
         SDL_PauseAudioDevice(device, 0);
@@ -317,18 +358,18 @@ public:
     }
 
     float Mix(float triangle, float square1, float square2) {
-        return /*triangle * .66 + */square1;// *.16; //+ square2 * .16;
+        return triangle * .66 + square1 *.16 + square2 * .16;
     }
-    std::array<float, AUDIO_BUFFER_SIZE> triangle_buffer;
-    std::array<float, AUDIO_BUFFER_SIZE> square1_buffer;
-    std::array<float, AUDIO_BUFFER_SIZE> square2_buffer;
+    std::array<float, AUDIO_SAMPLE_CHUNK> triangle_buffer;
+    std::array<float, AUDIO_SAMPLE_CHUNK> square1_buffer;
+    std::array<float, AUDIO_SAMPLE_CHUNK> square2_buffer;
     //returns a normalized amplitude from 0.0 to 1.0
-    void GetSamples(std::array<float, AUDIO_BUFFER_SIZE>& out_buffer) {
+    void GetSamples(std::array<float, AUDIO_SAMPLE_CHUNK>& out_buffer) {
         access_mutex.lock();
         triangle.GetNextSamples(triangle_buffer);
         square1.GetNextSamples(square1_buffer);
         square2.GetNextSamples(square2_buffer);
-        for (int i = 0; i < AUDIO_BUFFER_SIZE; i++) {
+        for (int i = 0; i < AUDIO_SAMPLE_CHUNK; i++) {
             out_buffer[i] = Mix(triangle_buffer[i], square1_buffer[i], square2_buffer[i]);
         }
         access_mutex.unlock();
@@ -407,29 +448,36 @@ public:
 std::vector<float> samples;
 bool log_samples = false;
 export void AudioThread(AudioDriver *audioDriver) {
+    /*
     auto start_time = std::chrono::system_clock::now();
     //std::chrono::duration<float>  sample_time_increment{ (float)AUDIO_BUFFER_SIZE / (float)SAMPLES_PER_SECOND };
     std::chrono::duration<int, std::ratio<AUDIO_BUFFER_SIZE, SAMPLES_PER_SECOND_INT * 2>> sample_increment{ 1 };
     auto current_time = std::chrono::system_clock::now();
-    std::array<float, AUDIO_BUFFER_SIZE> float_sample_buffer = {SILENCE};
-    std::array<uint8_t, AUDIO_BUFFER_SIZE> out_sample_buffer;
     //int second_counter = 0;
     bool samples_set = false;
+    */
+    std::array<float, AUDIO_SAMPLE_CHUNK> float_sample_buffer = { SILENCE };
+    std::array<uint8_t, AUDIO_BUFFER_SIZE> out_sample_buffer;
+    int amount_in_buffer = 0;
     while (true) {
-        current_time = std::chrono::system_clock::now();
-        if (current_time - start_time >= 2 * sample_increment) {
-            SDL_QueueAudio(audioDriver->GetDeviceID(), out_sample_buffer.data(), AUDIO_BUFFER_SIZE);
-            start_time = std::chrono::system_clock::now();
-            samples_set = false;
-        }
-        else if (current_time - start_time >= sample_increment) {
-            if (samples_set == false) {
-                audioDriver->GetSamples(float_sample_buffer);
+        int writeBuff = audioDriver->aBufferData.nextBufferToWrite;
+        if (audioDriver->aBufferData.bufferReadyToWrite[writeBuff]) {
+            audioDriver->GetSamples(float_sample_buffer);
+            for (int i = 0; i < AUDIO_SAMPLE_CHUNK; i++) {
+                out_sample_buffer[i+amount_in_buffer] = float_sample_buffer[i] * 255;
+            }
+            //if we've written the entire buffer, then we can lock it and write...
+            amount_in_buffer += AUDIO_SAMPLE_CHUNK;
+            if (amount_in_buffer >= AUDIO_BUFFER_SIZE) {
+                audioDriver->aBufferData.audioBufferMutexes[writeBuff].lock();
                 for (int i = 0; i < AUDIO_BUFFER_SIZE; i++) {
-                    out_sample_buffer[i] = float_sample_buffer[i] * 255;
-                    if (log_samples) samples.push_back(out_sample_buffer[i]);
+                    audioDriver->aBufferData.callbackBuffers[writeBuff][i] = out_sample_buffer[i];
                 }
-                samples_set = true;
+                audioDriver->aBufferData.bufferReadyToRead[writeBuff] = true;
+                audioDriver->aBufferData.bufferReadyToWrite[writeBuff] = false;
+                audioDriver->aBufferData.nextBufferToWrite = 1 - audioDriver->aBufferData.nextBufferToWrite;
+                audioDriver->aBufferData.audioBufferMutexes[writeBuff].unlock();
+                amount_in_buffer -= AUDIO_BUFFER_SIZE;
             }
         }
     }

@@ -9,7 +9,7 @@ export struct SquareData {
 	bool has_changed = false;
 	
 	uint8_t duty_cycle = 0;//?
-	bool halt_remaining_time = false;
+	bool length_counter_halt = false;
 	uint8_t length_counter = 0; //duration of the note
 	uint16_t timer = 0; //sets freq.  period is t + 1 APU cycles
 	EnvelopeFlag envelope_flag = EnvelopeFlag::constant_time;
@@ -26,12 +26,16 @@ export struct TriangleData {
 	bool has_changed = false;
 
 	bool length_counter_halt;
-	uint8_t linear_counter_reload;
+	uint8_t linear_counter;
 	uint16_t timer;
-	uint8_t length_counter_load;
+	uint8_t length_counter;
 };
 
+export enum class frameCounterMode {mode_4_step, mode_5_step};
+
 export struct APUData {
+	frameCounterMode mode = frameCounterMode::mode_4_step;
+	float APUcycles = 0;
 	SquareData square1Data;
 	SquareData square2Data;
 	TriangleData triangleData;
