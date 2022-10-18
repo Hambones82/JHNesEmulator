@@ -69,20 +69,22 @@ void PlayAudio(void* userData, Uint8* stream, int len) {
 //current state of voice?
 
 export enum class Instrument { square1, square2, triangle };
-export enum class VoiceOp { start, stop };
+export enum class VoiceOp { start, stop, volume };
 
 struct VoiceCommand {
 private:
     const float note_spacing = 1.0 / 100000.0;
     float freq;
     float time; // in beats -- yes.
+    float gain;
     VoiceOp voiceOp;
     Instrument instrument;
     //float phase?
 public:
-    VoiceCommand(float in_freq, float in_time, VoiceOp inOp, Instrument in_instrument) {
+    VoiceCommand(float in_freq, float in_time, float in_gain, VoiceOp inOp, Instrument in_instrument) {
         freq = in_freq;
         time = in_time;
+        gain = in_gain;
         voiceOp = inOp;
         instrument = in_instrument;
     }
@@ -177,6 +179,7 @@ private:
     int current_time_index = 0;
     float current_note_start_phase = 0; //0.0 to 1.0
     int current_note_track_index = 0; //oh yeah, because we have stops...
+    int current_volume_track_index = 0;
     
 public:
     void DoCommand(std::unique_ptr<VoiceCommand> voiceCommand) {
@@ -251,21 +254,31 @@ public:
             }
             //if there is a next note and that note is prior to the current time index, set to next note, get sample
             //***THE WHILE LOOP ADVANCES TO THE FIRST NOTE THAT IS AFTER TO THE CURRENT TIME***//
-            else if (track[current_note_track_index + 1].get()->GetStartTimeIndex() <= current_time_index) { 
-                while (current_note_track_index + 1 < track.size()) {
-                    current_note_track_index++;
-                    if (current_note_track_index == track.size() - 1) {
+            else if (track[current_note_track_index + 1]->GetStartTimeIndex() <= current_time_index) { 
+                int note_index_search = current_note_track_index + 1;
+                bool found_next_note = false;// (track[note_index_search]->GetOp()) != (VoiceOp::volume);
+                while (note_index_search < track.size()) {
+                    if (note_index_search == track.size() - 1 &&
+                        track[note_index_search]->GetStartTimeIndex() <= current_time_index ) {
+                        found_next_note = (track[note_index_search]->GetOp()) != (VoiceOp::volume);
                         break;
                     }
-                    else if (!(track[current_note_track_index + 1].get()->GetStartTimeIndex() <= current_time_index)) {
+                    else if ((track[note_index_search]->GetStartTimeIndex() <= current_time_index) &&
+                             track[note_index_search]->GetOp() != VoiceOp::volume) {
+                        found_next_note = true;
+                        //!(track[note_index_search]->GetStartTimeIndex() <= current_time_index) && ) {
                         break;
                     }
+                    note_index_search++;
                 }
                 //current_note_start_phase = CurrentPhase();//in waveforms
+                if (found_next_note) {
+                    current_note_track_index = note_index_search;
+                }
                 out_buffer[i] = CurrentNoteSample();
             }
             //if there is a next note but it's later than now, continue with current note
-            else if (track[current_note_track_index + 1].get()->GetStartTimeIndex() > current_time_index) {
+            else if (track[current_note_track_index + 1]->GetStartTimeIndex() > current_time_index) {
                 out_buffer[i] = CurrentNoteSample();
             }
             else {
@@ -279,7 +292,7 @@ public:
     }
     Voice(Instrument in_instrument) {
         instrument = in_instrument;
-        DoCommand(std::make_unique<VoiceCommand>(1, 0, VoiceOp::stop, instrument));
+        DoCommand(std::make_unique<VoiceCommand>(1, 0, 1, VoiceOp::stop, instrument));
     }
     std::string ToString() {
         std::stringstream sstream;
@@ -331,11 +344,15 @@ public:
         SDL_PauseAudioDevice(device, 0);
     }
     void DoVoiceCommand(float freq, float time, VoiceOp op, Instrument instrument) {
-        DoVoiceCommand(std::make_unique<VoiceCommand>(freq, time, op, instrument));
+        DoVoiceCommand(std::make_unique<VoiceCommand>(freq, time, 1.0, op, instrument));
     }
 
     void DoVoiceCommand(float freq, VoiceOp op, Instrument instrument) {
         DoVoiceCommand(freq, TimeSinceStart(), op, instrument);
+    }
+
+    void DoVolumeCommand(float gain, Instrument instrument) {
+        DoVoiceCommand(std::make_unique<VoiceCommand>(1.0, TimeSinceStart(), gain, VoiceOp::volume, instrument));
     }
 
     void DoVoiceCommand(std::unique_ptr<VoiceCommand> voiceCommand) {
@@ -381,67 +398,6 @@ public:
             << "Square1:\n========\n" << square1.ToString()
             << "Square2:\n========\n" << square2.ToString();
         return sstream.str();
-    }
-};
-
-//this is probably unused
-template<typename T>
-struct AudioSample {
-    uint64_t audio_index;
-    T sample;
-};
-
-//circular buffer...
-template<int size, typename T>
-struct AudioBuffer {
-private:
-    int write;
-    int read;
-public:
-
-    std::array<T, size> buffer;
-
-    AudioBuffer() {
-        read = 0;
-        write = 0;
-        buffer = std::array<T, size>{};
-    }
-
-    T Read() {
-        if ((read == write) || (read == write - 1) || ((write == 0) && (read == size))) {
-            return buffer[read];
-        }
-
-        auto retval = buffer[read];
-        if ((read + 1) % size != write) {
-            read++;
-            if (read == size) {
-                read = 0;
-            }
-        }
-
-        return retval;
-    }
-
-    bool Write(T val) {
-        buffer[write] = val;
-        int next = (write + 1) % size;
-        if (next != read) {
-            write = next;
-        }
-        return true;
-    }
-
-    //should have a needs write -- or is empty...  basically... if read != write and if write -1 != read
-    std::string GetStatus() {
-        std::stringstream outStream;
-        for (int i = 0; i < size; i++)
-        {
-            outStream << buffer[i] << " ";
-        }
-        outStream << "\nRead ptr: " << read << "\n";
-        outStream << "Write ptr: " << write << "\n";
-        return outStream.str();
     }
 };
 
