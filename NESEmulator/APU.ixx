@@ -17,12 +17,68 @@ export module APU;
 //set timer --...  i think this should just set freq
 //length should be handled internally..
 
+class EnvelopeUnit {
+private:
+	Instrument instrument;
+	uint8_t timer; //when clocked, if 0, generates output clock and reloads period P
+	uint8_t period;
+	bool start_flag;
+	bool loop_flag;
+	uint8_t decay_level_counter;
+public:
+	EnvelopeUnit(Instrument in_instrument) {
+		instrument = in_instrument;
+	}
+	//returns true if a new decay level is produced, false otherwise
+	bool Tick() {
+		bool retval = false;
+		if (start_flag) {
+			start_flag = false;
+			decay_level_counter = 15;
+			timer = period;
+			retval = true;
+		}
+		else if (timer == 0) {
+			timer = period;
+			if (decay_level_counter == 0) {
+				if (loop_flag) {
+					decay_level_counter = 15;
+					retval = true;
+				}
+			}
+			else {
+				decay_level_counter--;
+				retval = true;
+			}
 
+		}
+		else {
+			timer--;
+		}
+		return retval;
+	}
+	void SetPeriod(uint8_t in_period) {
+		period = in_period;
+		start_flag = true;
+	}
+	void SetLoopFlag(bool in_loop_flag) {
+		loop_flag = in_loop_flag;
+	}
+	uint8_t GetDecayLevel() {
+		return decay_level_counter;
+	}
+	float GetDecayLevelFloat() {
+		return (float)decay_level_counter / 15.0;
+	}
+};
 
 export class APU {
 private:
 	APUData apuData;
 	AudioDriver* audioDriver;
+	EnvelopeUnit square1Envelope{Instrument::square1};
+	EnvelopeUnit square2Envelope{ Instrument::square2 };
+
 	std::array<uint8_t, 0x20> length_lut{
 			10, 254, 20,  2, 40,  4, 80,  6, 160,  8, 60, 10, 14, 12, 26, 14,
 			12, 16, 24, 18, 48, 20, 96, 22, 192, 24, 72, 26, 16, 28, 32, 30
@@ -33,6 +89,9 @@ private:
 
 	void SetDriverFreq(uint16_t timer, Instrument instrument) {
 		float new_freq = 1789773. / (16 * (timer + 1));
+		if (instrument == Instrument::triangle) {
+			new_freq /= 2.0;
+		}
 		if ((new_freq >= 20) && (new_freq < 14000)) {
 			audioDriver->DoVoiceCommand(new_freq, VoiceOp::start, instrument);
 		}
@@ -40,20 +99,28 @@ private:
 			audioDriver->DoVoiceCommand(0, VoiceOp::stop, instrument);
 		}
 	}
+	void SetDriverVolume(float vol, Instrument instrument) {
+		audioDriver->DoVolumeCommand(vol, instrument);
+	}
+
 	void StopDriver(Instrument instrument) {
 		audioDriver->DoVoiceCommand(1, VoiceOp::stop, instrument);
 	}
-	void SetSquareData_0_reg(SquareData& inSquareData, uint8_t value) {
+	void SetSquareData_0_reg(SquareData& inSquareData, uint8_t value, Instrument instrument) {
 		inSquareData.duty_cycle = value & 0b1100'0000 >> 6;
 		inSquareData.length_counter_halt = value & 0b0010'0000 >> 5;
-		inSquareData.envelope_flag = (value & 0b0001'0000 >> 4) ? EnvelopeFlag::constant_time : EnvelopeFlag::envelope;
+		inSquareData.envelope_flag = ((value & 0b0001'0000) >> 4) ? EnvelopeFlag::constant_time : EnvelopeFlag::envelope;
 		inSquareData.envelope_period = value & 0x0F;
+		
+		if (inSquareData.envelope_flag == EnvelopeFlag::constant_time) {
+			SetDriverVolume((float)(inSquareData.envelope_period) / 15., instrument);
+		}
 	}
 
 	void SetSquareData_1_reg(SquareData& inSquareData, uint8_t value) {
-		inSquareData.sweep_enabled = value & 0b1000'0000 >> 7;
-		inSquareData.sweep_period = value & 0b0111'0000 >> 4;
-		inSquareData.negate = value & 0b0000'1000 >> 3;
+		inSquareData.sweep_enabled = (value & 0b1000'0000) >> 7;
+		inSquareData.sweep_period = (value & 0b0111'0000) >> 4;
+		inSquareData.negate = (value & 0b0000'1000) >> 3;
 		inSquareData.shift_counter = value & 0x07;
 	}
 
@@ -107,7 +174,12 @@ private:
 		}
 	}
 	void ClockEnvTriLin() {
-
+		if (square1Envelope.Tick() && (apuData.square1Data.envelope_flag == EnvelopeFlag::envelope)) {
+			audioDriver->DoVolumeCommand(square1Envelope.GetDecayLevelFloat(), Instrument::square1);
+		}
+		if (square2Envelope.Tick() && (apuData.square2Data.envelope_flag == EnvelopeFlag::envelope)) {
+			audioDriver->DoVolumeCommand(square2Envelope.GetDecayLevelFloat(), Instrument::square2);
+		}
 	}
 public:
 	//for now, just try setting frequency, have the audio driver play samples based on the set freq.
@@ -155,8 +227,10 @@ public:
 		Instrument instrument_affected;
 		switch (regNum) {
 		case 0x4000:
-			SetSquareData_0_reg(apuData.square1Data, val);
+			SetSquareData_0_reg(apuData.square1Data, val, Instrument::square1);
 			//std::cout <<std::hex<< "writing to 4000 (duty cycle, lenght halt, volume): " << (int)val << "\n";
+			square1Envelope.SetPeriod(apuData.square1Data.envelope_period);
+			square1Envelope.SetLoopFlag(apuData.square1Data.length_counter_halt);
 			break;
 		case 0x4001:
 			SetSquareData_1_reg(apuData.square1Data, val);
@@ -171,7 +245,9 @@ public:
 			//std::cout << "writing to 4003 (pulse1 length): " << (int)val << "\n";
 			break;
 		case 0x4004:
-			SetSquareData_0_reg(apuData.square2Data, val);
+			SetSquareData_0_reg(apuData.square2Data, val, Instrument::square2);
+			square2Envelope.SetPeriod(apuData.square2Data.envelope_period);
+			square2Envelope.SetLoopFlag(apuData.square2Data.length_counter_halt);
 			break;
 		case 0x4005:
 			SetSquareData_1_reg(apuData.square2Data, val);

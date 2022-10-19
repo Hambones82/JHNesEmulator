@@ -16,7 +16,7 @@ const int AUDIO_SAMPLE_CHUNK = 10;
 float TEMPO = 168; //beats per minute
 const float SAMPLES_PER_SECOND = 44100.0;
 const int SAMPLES_PER_SECOND_INT = 44100;
-float SILENCE = 0.0;
+float SILENCE = 0.5;
 int AudioBitDepth = 256;
 
 class AudioBufferData {
@@ -111,6 +111,9 @@ public:
     }
 
     int silences = 0;
+    float GetGain() {
+        return gain;
+    }
     float GetSample(float phase) {
         if (voiceOp == VoiceOp::stop) {
             silences++;
@@ -195,7 +198,8 @@ public:
                     continue;
                 }
                 else if (track[i]->StartTime() == voiceCommand->StartTime()) {
-                    track[i] = std::move(voiceCommand);
+                    //track[i] = std::move(voiceCommand);
+                    track.insert(track.begin() + i+1, std::move(voiceCommand));
                     return;
                 }
                 else {
@@ -236,8 +240,9 @@ public:
     float CurrentNoteSample() {
         //get the sample based on the phase
         float retval = track[current_note_track_index]->GetSample(CurrentPhase());
+        float gain = track[current_volume_track_index]->GetGain();
         //std::cout << "value: " << retval << "\n";
-        return retval;
+        return retval * gain;
     }
 
     //probably want a rewind to index thing...
@@ -249,13 +254,14 @@ public:
         for (int i = 0; i < AUDIO_SAMPLE_CHUNK; i++) {
             current_time_index++;
             int latest_index = current_note_track_index > current_volume_track_index ? current_note_track_index : current_volume_track_index;
-            if ((current_note_track_index == track.size() - 1)
-                || (track[current_note_track_index + 1]->GetStartTimeIndex() > current_time_index)) {//the last note
+            if (latest_index == track.size() - 1) {
+                out_buffer[i] = CurrentNoteSample();
+            }
+            else if (track[latest_index + 1]->GetStartTimeIndex() > current_time_index) {
                 out_buffer[i] = CurrentNoteSample();
             }
             else if (track[latest_index + 1]->GetStartTimeIndex() <= current_time_index) { 
                 int note_index_search = latest_index + 1;
-                //bool found_next_note = false;// (track[note_index_search]->GetOp()) != (VoiceOp::volume);
                 while (note_index_search < track.size()) {
                     if (track[note_index_search]->GetStartTimeIndex() > current_time_index) { //if next note is later than now, get out of here
                         break;
@@ -372,7 +378,7 @@ public:
     }
 
     float Mix(float triangle, float square1, float square2) {
-        return triangle * .66 + square1 *.16 + square2 * .16;
+        return triangle * .66 + square1 * .16 + square2 * .16;
     }
     std::array<float, AUDIO_SAMPLE_CHUNK> triangle_buffer;
     std::array<float, AUDIO_SAMPLE_CHUNK> square1_buffer;
