@@ -115,13 +115,14 @@ public:
         return gain;
     }
     float GetSample(float phase) {
-        if (voiceOp == VoiceOp::stop) {
-            silences++;
-            return SILENCE;
-        }
-        else switch (instrument) {
+        
+        switch (instrument) {
         case Instrument::square1:
         case Instrument::square2:
+            if (voiceOp == VoiceOp::stop) {
+                silences++;
+                return SILENCE;
+            }
             if (phase >= 0 && phase < .5) {
                 return 0;
             }
@@ -183,9 +184,13 @@ private:
     float current_note_start_phase = 0; //0.0 to 1.0
     int current_note_track_index = 0; //oh yeah, because we have stops...
     int current_volume_track_index = 0; //need to insert a volume command to set volume to 1.0
+    float saved_phase = 0;
+    float last_phase = 0;
+    bool previously_on = false;
     
 public:
     void DoCommand(std::unique_ptr<VoiceCommand> voiceCommand) {
+        
         std::vector<std::unique_ptr<VoiceCommand>>::iterator it;
         //std::cout << "voice command begin\n";
         if (track.size() == 0) {
@@ -220,10 +225,21 @@ public:
 
     //this is wrong... might also want to insert silence at the beginning of the track...
     float CurrentPhase() {
+        //return .1; -- is there a problem with generating steady state non-zero value???
         //std::cout << "current phase begin\n";
         auto note = track[current_note_track_index].get();
-
-        float raw_phase = current_note_start_phase +
+        if (note->GetOp() == VoiceOp::stop) {
+            if (previously_on) {
+                saved_phase = last_phase;//what does it equal?  the last phase???
+                previously_on = false;
+            }
+            if (last_phase != 0) {
+                int i = 0;
+            }
+            return last_phase;
+        }
+        previously_on = true;
+        float raw_phase = saved_phase +
             (current_time_index - note->GetStartTimeIndex()) / SAMPLES_PER_SECOND * note->GetFreq();
 
         float result = raw_phase - (int)raw_phase;
@@ -233,13 +249,15 @@ public:
             std::cout << "phase is out of bounds: " << result << "\n";
         }
         //std::cout << "current phase end\n";
-        return raw_phase - (int)raw_phase;
+        last_phase = raw_phase - (int)raw_phase;
+        return last_phase;
     }
 
     //???
     float CurrentNoteSample() {
         //get the sample based on the phase
-        float retval = track[current_note_track_index]->GetSample(CurrentPhase());
+        auto current_note = track[current_note_track_index].get();
+        float retval = current_note->GetSample(CurrentPhase());
         float gain = track[current_volume_track_index]->GetGain();
         //std::cout << "value: " << retval << "\n";
         return retval * gain;
@@ -378,7 +396,7 @@ public:
     }
 
     float Mix(float triangle, float square1, float square2) {
-        return triangle * .66 + square1 * .16 + square2 * .16;
+        return triangle * .66;// +square1 * .16 + square2 * .16;
     }
     std::array<float, AUDIO_SAMPLE_CHUNK> triangle_buffer;
     std::array<float, AUDIO_SAMPLE_CHUNK> square1_buffer;

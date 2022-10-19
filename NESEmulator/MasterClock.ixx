@@ -13,7 +13,7 @@ public:
 	void MasterClockTick() {
 		PPUptr->Tick();
 		apu_clock_div++;
-		if (apu_clock_div == 6) {
+		if (apu_clock_div == 3) {
 			apu_clock_div = 0;
 			apuptr->Tick();//is this right?
 		}

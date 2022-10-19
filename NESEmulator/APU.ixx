@@ -136,16 +136,19 @@ private:
 	}
 	void SetTriData_8_reg(TriangleData& inTriData, uint8_t value) {
 		inTriData.length_counter_halt = (value & 0x80) >> 7;
-		inTriData.linear_counter = value & 0x7F;
+		inTriData.linear_counter_reload_value = value & 0x7F;
+		inTriData.linear_counter_reload_flag = true;
 	}
 	void SetTriData_A_reg(TriangleData& inTriData, uint8_t value) {
 		inTriData.timer &= 0xFF00;
 		inTriData.timer |= value;
+		inTriData.linear_counter_reload_flag = true;
 	}
 	void SetTriData_B_reg(TriangleData& inTriData, uint8_t value) {
 		inTriData.timer &= 0x00FF;
 		inTriData.timer |= ((uint16_t)value & 0x07) << 8;
 		inTriData.length_counter = LengthValueLookup((value & 0xF8) >> 3);
+		inTriData.linear_counter_reload_flag = true;
 	}
 	void ClockLengthCounters() {
 		if (!apuData.square1Data.length_counter_halt) {
@@ -167,7 +170,7 @@ private:
 		if (!apuData.triangleData.length_counter_halt) {
 			if (apuData.triangleData.length_counter > 0) {
 				apuData.triangleData.length_counter--;
-				if (apuData.triangleData.length_counter == 0) {
+				if (apuData.triangleData.length_counter == 0) { //is this correct?
 					StopDriver(Instrument::triangle);
 				}
 			}
@@ -180,6 +183,23 @@ private:
 		if (square2Envelope.Tick() && (apuData.square2Data.envelope_flag == EnvelopeFlag::envelope)) {
 			audioDriver->DoVolumeCommand(square2Envelope.GetDecayLevelFloat(), Instrument::square2);
 		}
+		
+		bool can_silence = apuData.triangleData.linear_counter == 1;
+		if (apuData.triangleData.linear_counter_reload_flag) {
+			apuData.triangleData.linear_counter = apuData.triangleData.linear_counter_reload_value;
+		}
+		else if(apuData.triangleData.linear_counter!= 0) {
+			apuData.triangleData.linear_counter--;
+		}
+
+		if ((apuData.triangleData.linear_counter == 0) && can_silence) {
+			StopDriver(Instrument::triangle);
+		}
+
+		if (!apuData.triangleData.length_counter_halt) {
+			apuData.triangleData.linear_counter_reload_flag = false;
+		}
+
 	}
 public:
 	//for now, just try setting frequency, have the audio driver play samples based on the set freq.
@@ -262,6 +282,7 @@ public:
 			//std::cout << "writing to 4007 (pulse2 length): " << (int)val << "\n";
 			break;
 		case 0x4008:
+			SetTriData_8_reg(apuData.triangleData, val);
 			break;
 		case 0x4009:
 			break;

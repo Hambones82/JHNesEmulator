@@ -27,8 +27,12 @@ export struct TriangleData {
 
 	bool length_counter_halt;
 	uint8_t linear_counter;
+	uint8_t linear_counter_reload_value;
 	uint16_t timer;
 	uint8_t length_counter;
+
+	bool linear_counter_reload_flag = false;
+	
 };
 
 export enum class frameCounterMode {mode_4_step, mode_5_step};
