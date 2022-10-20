@@ -7,12 +7,13 @@
 #include <sstream>
 #include <chrono>
 #include <mutex>
+#include "AudioFile.h"
 
 export module AudioDriver;
 import APUData;
 
 const int AUDIO_BUFFER_SIZE = 300; //in samples
-const int AUDIO_SAMPLE_CHUNK = 10;
+const int AUDIO_SAMPLE_CHUNK = 1;
 float TEMPO = 168; //beats per minute
 const float SAMPLES_PER_SECOND = 44100.0;
 const int SAMPLES_PER_SECOND_INT = 44100;
@@ -105,10 +106,6 @@ public:
         return instrument;
     }
 
-    int GetStartTimeIndex() {
-        int retval = (time / TEMPO) * 60.0 * SAMPLES_PER_SECOND;
-        return retval; //time is in beats...
-    }
 
     int silences = 0;
     float GetGain() {
@@ -119,6 +116,7 @@ public:
         switch (instrument) {
         case Instrument::square1:
         case Instrument::square2:
+            
             if (voiceOp == VoiceOp::stop) {
                 silences++;
                 return SILENCE;
@@ -183,13 +181,12 @@ enum class VoiceState {stopped, terminating, playing, };
 
 class Voice {
 private:
-    std::vector<std::unique_ptr<VoiceCommand>> track;
     Instrument instrument;
+    std::unique_ptr<VoiceCommand> currentCommand;
+    float gain = 1.0;
 
     int current_time_index = 0;
     float current_note_start_phase = 0; //0.0 to 1.0
-    int current_note_track_index = 0; //oh yeah, because we have stops...
-    int current_volume_track_index = 0; //need to insert a volume command to set volume to 1.0
     float saved_time_index = 0;
     float saved_freq = 0;
     float saved_phase = 0;
@@ -199,81 +196,92 @@ private:
 
     VoiceState voiceState = VoiceState::stopped;
     
+    float RescalePhase() {
+        return 0;
+    }
+
 public:
-    void DoCommand(std::unique_ptr<VoiceCommand> voiceCommand) {
-        
-        std::vector<std::unique_ptr<VoiceCommand>>::iterator it;
-        //std::cout << "voice command begin\n";
-        if (track.size() == 0) {
-            track.push_back(std::move(voiceCommand));
-            return;
+    void DoCommand(float in_freq, float in_gain, VoiceOp inOp, Instrument in_instrument) {
+        if (inOp == VoiceOp::volume) {
+            gain = in_gain;
         }
         else {
-            for (int i = 0; i < track.size(); i++) {
-                if (track[i]->StartTime() < voiceCommand->StartTime()) {
-                    continue;
-                }
-                else if (track[i]->StartTime() == voiceCommand->StartTime()) {
-                    //track[i] = std::move(voiceCommand);
-                    track.insert(track.begin() + i+1, std::move(voiceCommand));
-                    return;
-                }
-                else {
-                    track.insert(track.begin() + i, std::move(voiceCommand));
-                    return;
-                }
-            }
-            track.push_back(std::move(voiceCommand));
-        }
-        //std::cout << "voice command end\n";
-    }
-    //this might be unused...
-    void FillWithSilence(std::array<float, AUDIO_BUFFER_SIZE>& out_buffer, int start_index, int end_index) {
-        for (int i = start_index; i < end_index; i++) {
-            out_buffer[i] = SILENCE;
+            currentCommand = std::make_unique<VoiceCommand>(in_freq, current_time_index, in_gain, inOp, in_instrument);
         }
     }
 
+    int terminating_cycles = 0;
     //lost note lengths???
-    float CurrentPhase() {
-        auto note = track[current_note_track_index].get();
+    float CurrentPhase(int current_time_index) {
+        auto note = currentCommand.get();
+        float start_time_index = note->StartTime();
         auto note_op = note->GetOp();
         auto note_freq = note->GetFreq();
 
+        //the final phase we return
         float retPhase;
-
+        
+        //do we use the phase carried over from some prior note?
         bool carry_phase = false;
 
         //determine new state based on current note and previous state
         switch (voiceState) {
         case VoiceState::stopped:
             if (note_op == VoiceOp::start) {
+                //no need for carry phase -- starting at 0
+                saved_time_index = start_time_index;
                 voiceState = VoiceState::playing;
             }
             break;
         case VoiceState::terminating: 
+            carry_phase = true;
             if (note_op == VoiceOp::start) {
                 voiceState = VoiceState::playing;
-                carry_phase = true;
+                //need to reset start time...
+                float retPhase = (current_time_index - saved_time_index) / SAMPLES_PER_SECOND * saved_freq;
+                //above gives us the phase from the old note.
+                //get fractonal portion of retphase
+                float frac = retPhase - (int)retPhase;
+                //generate time index decrement from fractional portion
+                int time_index_dec = frac * SAMPLES_PER_SECOND / note_freq;
+                saved_time_index = current_time_index - time_index_dec;
+                //if we are terminating and start up again, we need to keep the phase
             }
             else if (phase_end) {
+                //if terminating has reached the end of a waveform, stop.  carry phase not needed (next note will restart at 0)
                 voiceState = VoiceState::stopped;
                 phase_end = false;
+                //std::cout << "terminating ended with " << terminating_cycles << "cycles\n";
             }
             //if phase ends, go to stopped -- maybe just check if phase is equal to or greater than 1?
             //need to think about this hard...
             break;
         case VoiceState::playing:
             if (note_op == VoiceOp::stop) {
+                //??
                 voiceState = VoiceState::terminating;
+                terminating_cycles = 0;
+                carry_phase = true;
             }
-            else if ((note_op == VoiceOp::start) && saved_freq != note_freq) {
+            else if ((note_op == VoiceOp::start) && (saved_freq != note_freq)) {
+                //need to reset start time...
+                float retPhase = (current_time_index - saved_time_index) / SAMPLES_PER_SECOND * saved_freq;
+                //above gives us the phase from the old note.
+                //get fractonal portion of retphase
+                float frac = retPhase - (int)retPhase;
+                //generate time index decrement from fractional portion
+                int time_index_dec = frac * SAMPLES_PER_SECOND / note_freq;
+                saved_time_index = current_time_index - time_index_dec;
                 carry_phase = true;
             }
             break;
         }
         if (carry_phase) {
+            //if we carry phase, we need to remember the last phase and keep it as our current start phase.
             carry_over_phase = last_phase;
+        }
+        else {
+            carry_over_phase = 0;
         }
         //set phase based on new/current state.
         switch (voiceState) {
@@ -281,24 +289,35 @@ public:
             retPhase = SILENCE;
             break;
         case VoiceState::playing:
-            saved_time_index = note->GetStartTimeIndex();
-            saved_freq = note->GetFreq();
-        case VoiceState::terminating:
+            saved_freq = note_freq;
             retPhase = (current_time_index - saved_time_index) / SAMPLES_PER_SECOND * saved_freq;
-            retPhase += carry_over_phase;
+            //retPhase += carry_over_phase;
+            break;
+        case VoiceState::terminating:
+            terminating_cycles++;
+            retPhase = (current_time_index - saved_time_index) / SAMPLES_PER_SECOND * saved_freq;
+            //retPhase += carry_over_phase;
+            //if(carry_over_phase != 0)
+            //    std::cout << "carry over phase: " << std::to_string(carry_over_phase) << "\n";
+            //std::cout << "ret phase: " << std::to_string(retPhase - (int)retPhase) << "\n";
             break;
         }
 
-        if ((int)retPhase != (int)saved_phase) {
+       
+        if (((int)retPhase != (int)saved_phase) && (voiceState == VoiceState::terminating)){
             phase_end = true;
         }
 
         saved_phase = retPhase;
+        
+        //retPhase = (current_time_index - start_time_index) / SAMPLES_PER_SECOND * note_freq;
 
         float result = retPhase - (int)retPhase;
 
-        last_phase = result;
-
+        if (voiceState == VoiceState::playing) {
+            last_phase = result;
+        }
+        
         if (result < 0 || result > 1)
         {
             std::cout << "phase is out of bounds: " << result << "\n";
@@ -310,14 +329,12 @@ public:
     //???
     float CurrentNoteSample() {
         //get the sample based on the phase
-        auto current_note = track[current_note_track_index].get();
-        float retval = current_note->GetSample(CurrentPhase());
-        float gain = track[current_volume_track_index]->GetGain();
+        auto current_note = currentCommand.get();
+        float retval = current_note->GetSample(CurrentPhase(current_time_index));
+        
         //std::cout << "value: " << retval << "\n";
         return retval * gain;
     }
-
-    //probably want a rewind to index thing...
 
     //i think we should advance to current time, placing all samples into an output buffer
     int debug_count_total_samples = 0;
@@ -325,52 +342,17 @@ public:
         debug_count_total_samples+= AUDIO_SAMPLE_CHUNK;
         for (int i = 0; i < AUDIO_SAMPLE_CHUNK; i++) {
             current_time_index++;
-            int latest_index = current_note_track_index > current_volume_track_index ? current_note_track_index : current_volume_track_index;
-            if (latest_index == track.size() - 1) {
-                out_buffer[i] = CurrentNoteSample();
-            }
-            else if (track[latest_index + 1]->GetStartTimeIndex() > current_time_index) {
-                out_buffer[i] = CurrentNoteSample();
-            }
-            else if (track[latest_index + 1]->GetStartTimeIndex() <= current_time_index) { 
-                int note_index_search = latest_index + 1;
-                while (note_index_search < track.size()) {
-                    if (track[note_index_search]->GetStartTimeIndex() > current_time_index) { //if next note is later than now, get out of here
-                        break;
-                    }
-                    else if (track[note_index_search]->GetOp() != VoiceOp::volume) {//if next note is less than now, and is play note, 
-                        current_note_track_index = note_index_search;               //update current note index
-                    }
-                    else if (track[note_index_search]->GetOp() == VoiceOp::volume) {//if next note is less than now and is volume, upd vol
-                        current_volume_track_index = note_index_search;
-                    }
-                    else if(note_index_search == track.size() - 1) {//if the next note is the last note, we must break or get an array oob
-                        break;
-                    }
-                    note_index_search++;
-                }
-                
-                out_buffer[i] = CurrentNoteSample();
-            }
-            //if there is a next note but it's later than now, continue with current note
-            else {
-                std::cout << "unhandled case in GetNextSamples()";
-            }
-        }
-        if (debug_count_total_samples >= SAMPLES_PER_SECOND_INT) {
-            std::cout << "current note index: " << current_note_track_index << "\n";
-            debug_count_total_samples -= SAMPLES_PER_SECOND;
+            out_buffer[i] = CurrentNoteSample();
+            
         }
     }
     Voice(Instrument in_instrument) {
         instrument = in_instrument;
-        DoCommand(std::make_unique<VoiceCommand>(1, 0, 1, VoiceOp::stop, instrument));
+        DoCommand(1, 0, VoiceOp::stop, instrument);
     }
     std::string ToString() {
         std::stringstream sstream;
-        for (auto& s : track) {
-            sstream << s->ToString();
-        }
+        sstream << currentCommand->ToString();
         return sstream.str();
     }
 };
@@ -393,6 +375,8 @@ private:
         float current_beat = (milliseconds_since_start.count() / 60000.) * TEMPO;
         return current_beat;
     }
+
+    
 public:
     AudioBufferData aBufferData;
     SDL_AudioDeviceID GetDeviceID() {
@@ -402,6 +386,7 @@ public:
         start_time = std::chrono::system_clock::now();//so darn complicated...
     }
     AudioDriver() {
+
         start_time = std::chrono::system_clock::now();//so darn complicated...
         if (SDL_Init(SDL_INIT_AUDIO) != 0) {
             std::cout << "error initializing audio: ";
@@ -418,30 +403,27 @@ public:
         device = SDL_OpenAudioDevice(NULL, 0, &want_spec, &got_spec, 0);
         SDL_PauseAudioDevice(device, 0);
     }
-    void DoVoiceCommand(float freq, float time, VoiceOp op, Instrument instrument) {
-        DoVoiceCommand(std::make_unique<VoiceCommand>(freq, time, 1.0, op, instrument));
-    }
-
+    
     void DoVoiceCommand(float freq, VoiceOp op, Instrument instrument) {
-        DoVoiceCommand(freq, TimeSinceStart(), op, instrument);
+        DoVoiceCommand(freq, 1.0, op, instrument);
     }
 
     void DoVolumeCommand(float gain, Instrument instrument) {
-        DoVoiceCommand(std::make_unique<VoiceCommand>(1.0, TimeSinceStart(), gain, VoiceOp::volume, instrument));
+        DoVoiceCommand(1.0, gain, VoiceOp::volume, instrument);
     }
 
-    void DoVoiceCommand(std::unique_ptr<VoiceCommand> voiceCommand) {
+    void DoVoiceCommand(float freq, float gain, VoiceOp op, Instrument instrument) {
         access_mutex.lock();
         //std::cout << "do voice command start\n";
-        switch (voiceCommand->GetInstrument()) {
+        switch (instrument) {
         case Instrument::triangle:
-            triangle.DoCommand(std::move(voiceCommand));
+            triangle.DoCommand(freq, gain, op, instrument);
             break;
         case Instrument::square1:
-            square1.DoCommand(std::move(voiceCommand));
+            square1.DoCommand(freq, gain, op, instrument);
             break;
         case Instrument::square2:
-            square2.DoCommand(std::move(voiceCommand));
+            square2.DoCommand(freq, gain, op, instrument);
             break;
         }
         //std::cout << "do voice command end\n";
@@ -450,7 +432,10 @@ public:
     }
 
     float Mix(float triangle, float square1, float square2) {
-        return triangle * .66;// +square1 * .16 + square2 * .16;
+        bool en_triangle = true;
+        bool en_square1 = true;
+        bool en_square2 = true;
+        return triangle * en_triangle *.66 + square1 * en_square1 * .16 + square2 * en_square2 * .16;
     }
     std::array<float, AUDIO_SAMPLE_CHUNK> triangle_buffer;
     std::array<float, AUDIO_SAMPLE_CHUNK> square1_buffer;
@@ -462,6 +447,7 @@ public:
         square1.GetNextSamples(square1_buffer);
         square2.GetNextSamples(square2_buffer);
         for (int i = 0; i < AUDIO_SAMPLE_CHUNK; i++) {
+            //std::cout << "square 1 samples: " << (int)square1_buffer[i] << "\n";
             out_buffer[i] = Mix(triangle_buffer[i], square1_buffer[i], square2_buffer[i]);
         }
         access_mutex.unlock();
@@ -478,24 +464,47 @@ public:
 
 std::vector<float> samples;
 bool log_samples = false;
+bool log_samples_triggered = false;
+int sample_counter = 0;
+int samples_logged = 0;
 export void AudioThread(AudioDriver *audioDriver) {
-    /*
-    auto start_time = std::chrono::system_clock::now();
-    //std::chrono::duration<float>  sample_time_increment{ (float)AUDIO_BUFFER_SIZE / (float)SAMPLES_PER_SECOND };
-    std::chrono::duration<int, std::ratio<AUDIO_BUFFER_SIZE, SAMPLES_PER_SECOND_INT * 2>> sample_increment{ 1 };
-    auto current_time = std::chrono::system_clock::now();
-    //int second_counter = 0;
-    bool samples_set = false;
-    */
     std::array<float, AUDIO_SAMPLE_CHUNK> float_sample_buffer = { SILENCE };
     std::array<uint8_t, AUDIO_BUFFER_SIZE> out_sample_buffer;
     int amount_in_buffer = 0;
+
+    //log samples
+    float seconds = 15;
+    float num_samples = seconds * SAMPLES_PER_SECOND;
+
+    AudioFile<float> audioFile;
+    audioFile.setNumChannels(1);
+    audioFile.setBitDepth(8);
+    audioFile.setSampleRate(SAMPLES_PER_SECOND);
+    audioFile.setNumSamplesPerChannel(num_samples);
+
+    //end log samples
+
     while (true) {
+        sample_counter++;
+        /*
+        if ((sample_counter > 1000000) && !log_samples_triggered) {
+            log_samples = true;
+            log_samples_triggered = true;
+        }*/
         int writeBuff = audioDriver->aBufferData.nextBufferToWrite;
         if (audioDriver->aBufferData.bufferReadyToWrite[writeBuff]) {
             audioDriver->GetSamples(float_sample_buffer);
             for (int i = 0; i < AUDIO_SAMPLE_CHUNK; i++) {
                 out_sample_buffer[i+amount_in_buffer] = float_sample_buffer[i] * 255;
+                if (log_samples) {
+                    //samples.push_back(out_sample_buffer[i + amount_in_buffer]);
+                    audioFile.samples[0][samples_logged++] = float_sample_buffer[i];
+                    if (samples_logged == num_samples) {
+                        std::string filepath = R"(C:\Users\Josh\source\SDLAudioTest\outputWavs\output1.wav)";
+                        audioFile.save(filepath, AudioFileFormat::Wave);
+                        log_samples = false;
+                    }
+                }
             }
             //if we've written the entire buffer, then we can lock it and write...
             amount_in_buffer += AUDIO_SAMPLE_CHUNK;

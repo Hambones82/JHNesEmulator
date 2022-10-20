@@ -63,5 +63,19 @@
     <ClCompile Include="PlatformIO.ixx">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="APU.ixx">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="APUData.ixx">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="AudioDriver.ixx">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="AudioFile.h">
+      <Filter>Source Files</Filter>
+    </ClInclude>
   </ItemGroup>
 </Project>
