@@ -175,6 +175,12 @@ public:
     }
 };
 
+enum class VoiceState {stopped, terminating, playing, };
+//if stopped and see a start, go to playing
+//if playing and see a stop, go to terminating
+//if terminating and see another note, go to playing
+//if terminating and note ends, go to stopped
+
 class Voice {
 private:
     std::vector<std::unique_ptr<VoiceCommand>> track;
@@ -184,9 +190,14 @@ private:
     float current_note_start_phase = 0; //0.0 to 1.0
     int current_note_track_index = 0; //oh yeah, because we have stops...
     int current_volume_track_index = 0; //need to insert a volume command to set volume to 1.0
+    float saved_time_index = 0;
+    float saved_freq = 0;
     float saved_phase = 0;
+    float carry_over_phase = 0;
     float last_phase = 0;
-    bool previously_on = false;
+    bool phase_end = false;
+
+    VoiceState voiceState = VoiceState::stopped;
     
 public:
     void DoCommand(std::unique_ptr<VoiceCommand> voiceCommand) {
@@ -223,34 +234,77 @@ public:
         }
     }
 
-    //this is wrong... might also want to insert silence at the beginning of the track...
+    //lost note lengths???
     float CurrentPhase() {
-        //return .1; -- is there a problem with generating steady state non-zero value???
-        //std::cout << "current phase begin\n";
         auto note = track[current_note_track_index].get();
-        if (note->GetOp() == VoiceOp::stop) {
-            if (previously_on) {
-                saved_phase = last_phase;//what does it equal?  the last phase???
-                previously_on = false;
-            }
-            if (last_phase != 0) {
-                int i = 0;
-            }
-            return last_phase;
-        }
-        previously_on = true;
-        float raw_phase = saved_phase +
-            (current_time_index - note->GetStartTimeIndex()) / SAMPLES_PER_SECOND * note->GetFreq();
+        auto note_op = note->GetOp();
+        auto note_freq = note->GetFreq();
 
-        float result = raw_phase - (int)raw_phase;
-        //std::cout << "current phase: " << result << "\n";
+        float retPhase;
+
+        bool carry_phase = false;
+
+        //determine new state based on current note and previous state
+        switch (voiceState) {
+        case VoiceState::stopped:
+            if (note_op == VoiceOp::start) {
+                voiceState = VoiceState::playing;
+            }
+            break;
+        case VoiceState::terminating: 
+            if (note_op == VoiceOp::start) {
+                voiceState = VoiceState::playing;
+                carry_phase = true;
+            }
+            else if (phase_end) {
+                voiceState = VoiceState::stopped;
+                phase_end = false;
+            }
+            //if phase ends, go to stopped -- maybe just check if phase is equal to or greater than 1?
+            //need to think about this hard...
+            break;
+        case VoiceState::playing:
+            if (note_op == VoiceOp::stop) {
+                voiceState = VoiceState::terminating;
+            }
+            else if ((note_op == VoiceOp::start) && saved_freq != note_freq) {
+                carry_phase = true;
+            }
+            break;
+        }
+        if (carry_phase) {
+            carry_over_phase = last_phase;
+        }
+        //set phase based on new/current state.
+        switch (voiceState) {
+        case VoiceState::stopped:
+            retPhase = SILENCE;
+            break;
+        case VoiceState::playing:
+            saved_time_index = note->GetStartTimeIndex();
+            saved_freq = note->GetFreq();
+        case VoiceState::terminating:
+            retPhase = (current_time_index - saved_time_index) / SAMPLES_PER_SECOND * saved_freq;
+            retPhase += carry_over_phase;
+            break;
+        }
+
+        if ((int)retPhase != (int)saved_phase) {
+            phase_end = true;
+        }
+
+        saved_phase = retPhase;
+
+        float result = retPhase - (int)retPhase;
+
+        last_phase = result;
+
         if (result < 0 || result > 1)
         {
             std::cout << "phase is out of bounds: " << result << "\n";
         }
-        //std::cout << "current phase end\n";
-        last_phase = raw_phase - (int)raw_phase;
-        return last_phase;
+
+        return result;
     }
 
     //???
