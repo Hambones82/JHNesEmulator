@@ -79,6 +79,10 @@ private:
 	EnvelopeUnit square1Envelope{Instrument::square1};
 	EnvelopeUnit square2Envelope{ Instrument::square2 };
 
+	bool reset_4017_triggered = false;
+	uint8_t reset_4017_counter = 0;
+
+
 	std::array<uint8_t, 0x20> length_lut{
 			10, 254, 20,  2, 40,  4, 80,  6, 160,  8, 60, 10, 14, 12, 26, 14,
 			12, 16, 24, 18, 48, 20, 96, 22, 192, 24, 72, 26, 16, 28, 32, 30
@@ -138,6 +142,10 @@ private:
 		inTriData.length_counter_halt = (value & 0x80) >> 7;
 		inTriData.linear_counter_reload_value = value & 0x7F;
 		inTriData.linear_counter_reload_flag = true;
+		if ((inTriData.linear_counter_reload_value == 0) && (inTriData.length_counter_halt == 1)) {
+			StopDriver(Instrument::triangle);
+		}
+
 	}
 	void SetTriData_A_reg(TriangleData& inTriData, uint8_t value) {
 		inTriData.timer &= 0xFF00;
@@ -150,6 +158,13 @@ private:
 		inTriData.length_counter = LengthValueLookup((value & 0xF8) >> 3);
 		inTriData.linear_counter_reload_flag = true;
 	}
+	void SetStatus(uint8_t value) {
+		audioDriver->SetTriangleEnabled(value & 0b0000'0100);
+		audioDriver->SetSquare2Enabled(value & 0b0000'0010);
+		audioDriver->SetSquare1Enabled(value & 0b0000'0001);
+
+	}
+
 	void ClockLengthCounters() {
 		if (!apuData.square1Data.length_counter_halt) {
 			if (apuData.square1Data.length_counter > 0) {
@@ -190,10 +205,12 @@ private:
 		}
 		else if(apuData.triangleData.linear_counter!= 0) {
 			apuData.triangleData.linear_counter--;
+			//std::cout << "triangle linear counter: " << (int)(apuData.triangleData.linear_counter) << "\n";
 		}
 
 		if ((apuData.triangleData.linear_counter == 0) && can_silence) {
 			StopDriver(Instrument::triangle);
+			//std::cout << "linear ctr silencing tri\n";
 		}
 
 		if (!apuData.triangleData.length_counter_halt) {
@@ -234,6 +251,15 @@ public:
 				apuData.APUcycles = 0;
 			}
 			break;
+		}
+		if (reset_4017_triggered) {
+			reset_4017_counter--;
+			if (reset_4017_counter == 0) {
+				reset_4017_triggered = false;
+				apuData.APUcycles = 0;
+				ClockLengthCounters();
+				ClockEnvTriLin();
+			}
 		}
 	}
 	//the apu has to be clocked...
@@ -283,22 +309,30 @@ public:
 			break;
 		case 0x4008:
 			SetTriData_8_reg(apuData.triangleData, val);
+			//std::cout << "writing to 4008 (tri lin ctr): " << std::hex << (int)val << "\n";
 			break;
 		case 0x4009:
 			break;
 		case 0x400A:
 			SetTriData_A_reg(apuData.triangleData, val);
 			SetDriverFreq(apuData.triangleData.timer, Instrument::triangle);
+			//std::cout << "writing to 400A (freq): " << std::hex << (int)val << "\n";
 			break;
 		case 0x400B:
 			SetTriData_B_reg(apuData.triangleData, val);
 			SetDriverFreq(apuData.triangleData.timer, Instrument::triangle);
+			//std::cout << "writing to 400B (tri length): " << std::hex << (int)val << "\n";
 			break;
 		case 0x4015:
 			//std::cout << "writing to 4015: " << (int)val << "\n";
+			SetStatus(val);
 			break;
 		case 0x4017:
 			apuData.mode = (val & 0x80) ? frameCounterMode::mode_5_step : frameCounterMode::mode_4_step;
+			reset_4017_triggered = true;
+			float cycles_frac = apuData.APUcycles - (int)(apuData.APUcycles);
+			reset_4017_counter = (cycles_frac == 0) ? 3 : 4;
+			//std::cout << "writing to 4017 (frame counter): " << std::hex << (int)val << "\n";
 			break;
 		}
 		//whenever there is an update to necessary parameters, do that update.

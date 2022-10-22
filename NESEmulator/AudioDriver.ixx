@@ -60,14 +60,7 @@ void PlayAudio(void* userData, Uint8* stream, int len) {
         aBufferData->nextBufferToRead = 1 - aBufferData->nextBufferToRead; 
         aBufferData->audioBufferMutexes[readBuffer].unlock();
     }
- 
-    //need to signal that we've read the buffer and it can be used...
-
 }
-//TODO:
-//VoiceRender -- generates samples from voice state
-//something w phase?
-//current state of voice?
 
 export enum class Instrument { square1, square2, triangle };
 export enum class VoiceOp { start, stop, volume };
@@ -375,10 +368,21 @@ private:
         float current_beat = (milliseconds_since_start.count() / 60000.) * TEMPO;
         return current_beat;
     }
-
+    bool en_triangle = true;
+    bool en_square1 = true;
+    bool en_square2 = true;
     
 public:
     AudioBufferData aBufferData;
+    void SetTriangleEnabled(uint8_t value) {
+        en_triangle = value ? true : false;
+    }
+    void SetSquare2Enabled(uint8_t value) {
+        en_square2 = value ? true : false;
+    }
+    void SetSquare1Enabled(uint8_t value) {
+        en_square1 = value ? true : false;
+    }
     SDL_AudioDeviceID GetDeviceID() {
         return device;
     }
@@ -432,9 +436,7 @@ public:
     }
 
     float Mix(float triangle, float square1, float square2) {
-        bool en_triangle = true;
-        bool en_square1 = true;
-        bool en_square2 = true;
+        
         return triangle * en_triangle *.66 + square1 * en_square1 * .16 + square2 * en_square2 * .16;
     }
     std::array<float, AUDIO_SAMPLE_CHUNK> triangle_buffer;
