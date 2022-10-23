@@ -179,18 +179,20 @@ private:
     float gain = 1.0;
 
     int current_time_index = 0;
-    float current_note_start_phase = 0; //0.0 to 1.0
     float saved_time_index = 0;
     float saved_freq = 0;
     float saved_phase = 0;
-    float carry_over_phase = 0;
-    float last_phase = 0;
     bool phase_end = false;
 
     VoiceState voiceState = VoiceState::stopped;
     
-    float RescalePhase() {
-        return 0;
+    //to ensure sample continuity, when a first note flows directly into a second note,
+    //this function adjusts the saved time index to be as if the second note were playing the whole time
+    void AdjustTimeIndex() {
+        float retPhase = (current_time_index - saved_time_index) / SAMPLES_PER_SECOND * saved_freq;
+        float frac = retPhase - (int)retPhase;
+        int time_index_dec = frac * SAMPLES_PER_SECOND / currentCommand->GetFreq();
+        saved_time_index = current_time_index - time_index_dec;
     }
 
 public:
@@ -203,9 +205,8 @@ public:
         }
     }
 
-    int terminating_cycles = 0;
-    //lost note lengths???
     float CurrentPhase(int current_time_index) {
+        //cached values
         auto note = currentCommand.get();
         float start_time_index = note->StartTime();
         auto note_op = note->GetOp();
@@ -214,67 +215,32 @@ public:
         //the final phase we return
         float retPhase;
         
-        //do we use the phase carried over from some prior note?
-        bool carry_phase = false;
-
         //determine new state based on current note and previous state
         switch (voiceState) {
         case VoiceState::stopped:
             if (note_op == VoiceOp::start) {
-                //no need for carry phase -- starting at 0
                 saved_time_index = start_time_index;
                 voiceState = VoiceState::playing;
             }
             break;
         case VoiceState::terminating: 
-            carry_phase = true;
             if (note_op == VoiceOp::start) {
                 voiceState = VoiceState::playing;
-                //need to reset start time...
-                float retPhase = (current_time_index - saved_time_index) / SAMPLES_PER_SECOND * saved_freq;
-                //above gives us the phase from the old note.
-                //get fractonal portion of retphase
-                float frac = retPhase - (int)retPhase;
-                //generate time index decrement from fractional portion
-                int time_index_dec = frac * SAMPLES_PER_SECOND / note_freq;
-                saved_time_index = current_time_index - time_index_dec;
-                //if we are terminating and start up again, we need to keep the phase
+                AdjustTimeIndex();
             }
             else if (phase_end) {
-                //if terminating has reached the end of a waveform, stop.  carry phase not needed (next note will restart at 0)
                 voiceState = VoiceState::stopped;
                 phase_end = false;
-                //std::cout << "terminating ended with " << terminating_cycles << "cycles\n";
             }
-            //if phase ends, go to stopped -- maybe just check if phase is equal to or greater than 1?
-            //need to think about this hard...
             break;
         case VoiceState::playing:
             if (note_op == VoiceOp::stop) {
-                //??
                 voiceState = VoiceState::terminating;
-                terminating_cycles = 0;
-                carry_phase = true;
             }
             else if ((note_op == VoiceOp::start) && (saved_freq != note_freq)) {
-                //need to reset start time...
-                float retPhase = (current_time_index - saved_time_index) / SAMPLES_PER_SECOND * saved_freq;
-                //above gives us the phase from the old note.
-                //get fractonal portion of retphase
-                float frac = retPhase - (int)retPhase;
-                //generate time index decrement from fractional portion
-                int time_index_dec = frac * SAMPLES_PER_SECOND / note_freq;
-                saved_time_index = current_time_index - time_index_dec;
-                carry_phase = true;
+                AdjustTimeIndex();
             }
             break;
-        }
-        if (carry_phase) {
-            //if we carry phase, we need to remember the last phase and keep it as our current start phase.
-            carry_over_phase = last_phase;
-        }
-        else {
-            carry_over_phase = 0;
         }
         //set phase based on new/current state.
         switch (voiceState) {
@@ -284,32 +250,19 @@ public:
         case VoiceState::playing:
             saved_freq = note_freq;
             retPhase = (current_time_index - saved_time_index) / SAMPLES_PER_SECOND * saved_freq;
-            //retPhase += carry_over_phase;
             break;
         case VoiceState::terminating:
-            terminating_cycles++;
             retPhase = (current_time_index - saved_time_index) / SAMPLES_PER_SECOND * saved_freq;
-            //retPhase += carry_over_phase;
-            //if(carry_over_phase != 0)
-            //    std::cout << "carry over phase: " << std::to_string(carry_over_phase) << "\n";
-            //std::cout << "ret phase: " << std::to_string(retPhase - (int)retPhase) << "\n";
             break;
         }
-
        
         if (((int)retPhase != (int)saved_phase) && (voiceState == VoiceState::terminating)){
             phase_end = true;
         }
 
         saved_phase = retPhase;
-        
-        //retPhase = (current_time_index - start_time_index) / SAMPLES_PER_SECOND * note_freq;
 
         float result = retPhase - (int)retPhase;
-
-        if (voiceState == VoiceState::playing) {
-            last_phase = result;
-        }
         
         if (result < 0 || result > 1)
         {
@@ -318,8 +271,7 @@ public:
 
         return result;
     }
-
-    //???
+    
     float CurrentNoteSample() {
         //get the sample based on the phase
         auto current_note = currentCommand.get();

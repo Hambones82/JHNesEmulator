@@ -69,7 +69,6 @@ public:
 				memory_system->MapCHRBank(0, 1);
 			}
 			else if (PRG_size == 2) {
-				std::cout << "blah";
 				first = file_buf.begin() + 0x10;
 				last = file_buf.begin() + 0x2010;
 				std::vector<uint8_t> bank0(first, last);
