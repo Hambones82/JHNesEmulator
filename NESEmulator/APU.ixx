@@ -158,6 +158,22 @@ private:
 		inTriData.length_counter = LengthValueLookup((value & 0xF8) >> 3);
 		inTriData.linear_counter_reload_flag = true;
 	}
+	void SetNoise_C_reg(NoiseData& inNoiseData, uint8_t value) {
+		inNoiseData.length_counter_halt = (value & 0b0010'0000) >> 5;
+		inNoiseData.envelopeFlag = (value & 0b0001'0000) ? EnvelopeFlag::constant_time : EnvelopeFlag::envelope;
+		inNoiseData.envelope_period = value & 0x0F;
+	}
+	void SetNoise_E_reg(NoiseData& inNoiseData, uint8_t value) {
+		inNoiseData.noise_mode = (value & 0x80) >> 7;
+		std::array<uint16_t, 0x10> period_lut
+		{4, 8, 16, 32, 64, 96, 128, 160, 202, 254, 380, 508, 762, 1016, 2034, 4068};
+		inNoiseData.timer = period_lut[(value & 0x0F)];
+	}
+	void SetNoise_F_reg(NoiseData& inNoiseData, uint8_t value) {
+		inNoiseData.length_counter_load = (value & 0xF8) >> 3;
+		inNoiseData.envelope_restart = true;
+	}
+
 	void SetStatus(uint8_t value) {
 		audioDriver->SetTriangleEnabled(value & 0b0000'0100);
 		audioDriver->SetSquare2Enabled(value & 0b0000'0010);
@@ -322,6 +338,12 @@ public:
 			SetTriData_B_reg(apuData.triangleData, val);
 			SetDriverFreq(apuData.triangleData.timer, Instrument::triangle);
 			//std::cout << "writing to 400B (tri length): " << std::hex << (int)val << "\n";
+			break;
+		case 0x400C:
+			break;
+		case 0x400E:
+			break;
+		case 0x400F:
 			break;
 		case 0x4015:
 			//std::cout << "writing to 4015: " << (int)val << "\n";

@@ -62,7 +62,7 @@ void PlayAudio(void* userData, Uint8* stream, int len) {
     }
 }
 
-export enum class Instrument { square1, square2, triangle };
+export enum class Instrument { square1, square2, triangle, noise };
 export enum class VoiceOp { start, stop, volume };
 
 struct VoiceCommand {
@@ -288,7 +288,6 @@ public:
         for (int i = 0; i < AUDIO_SAMPLE_CHUNK; i++) {
             current_time_index++;
             out_buffer[i] = CurrentNoteSample();
-            
         }
     }
     Voice(Instrument in_instrument) {
@@ -311,6 +310,7 @@ private:
     Voice triangle{ Instrument::triangle };
     Voice square1{ Instrument::square1 };
     Voice square2{ Instrument::square2 };
+    Voice noise{ Instrument::noise };
     int sampleRate;//expressed as frequency in Hz
     Uint8 last_sample;
     float TimeSinceStart() /*in beats*/ {

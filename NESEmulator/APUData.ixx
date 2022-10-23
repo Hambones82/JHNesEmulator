@@ -6,8 +6,6 @@ export enum class EnvelopeFlag {constant_time, envelope};
 
 //https://www.nesdev.org/wiki/APU_Pulse
 export struct SquareData {
-	bool has_changed = false;
-	
 	uint8_t duty_cycle = 0;//?
 	bool length_counter_halt = false;
 	uint8_t length_counter = 0; //duration of the note
@@ -23,8 +21,6 @@ export struct SquareData {
 };
 
 export struct TriangleData {
-	bool has_changed = false;
-
 	bool length_counter_halt;
 	uint8_t linear_counter;
 	uint8_t linear_counter_reload_value;
@@ -35,6 +31,17 @@ export struct TriangleData {
 	
 };
 
+export struct NoiseData {
+	uint16_t shift_reg = 1;
+	bool length_counter_halt = false;
+	EnvelopeFlag envelopeFlag = EnvelopeFlag::constant_time;
+	uint16_t timer = 1;
+	uint8_t noise_mode = 0;
+	uint8_t envelope_period = 0;
+	uint8_t length_counter_load = 0;
+	bool envelope_restart = false;
+};
+
 export enum class frameCounterMode {mode_4_step, mode_5_step};
 
 export struct APUData {
@@ -43,4 +50,5 @@ export struct APUData {
 	SquareData square1Data;
 	SquareData square2Data;
 	TriangleData triangleData;
+	NoiseData noiseData;
 };
