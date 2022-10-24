@@ -61,47 +61,38 @@ void PlayAudio(void* userData, Uint8* stream, int len) {
 
 export enum class Instrument { square1, square2, triangle, noise };
 export enum class VoiceOp { start, stop, volume };
+enum class VoiceState {stopped, terminating, playing, };
+//if stopped and see a start, go to playing
+//if playing and see a stop, go to terminating
+//if terminating and see another note, go to playing
+//if terminating and note ends, go to stopped
 
-struct VoiceCommand {
+class Voice {
 private:
-    float freq;
-    float time; 
-    float gain;
-    VoiceOp voiceOp;
     Instrument instrument;
-public:
-    VoiceCommand(float in_freq, float in_time, float in_gain, VoiceOp inOp, Instrument in_instrument) {
-        freq = in_freq;
-        time = in_time;
-        gain = in_gain;
-        voiceOp = inOp;
-        instrument = in_instrument;
-    }
+    float freq;
+    float start_time_index;
+    VoiceOp voiceOp;
 
-    float StartTime() {
-        return time;
-    }
+    float gain = 1.0;
 
-    VoiceOp GetOp() { return voiceOp; }
+    int current_time_index = 0;
+    float saved_time_index = 0;
+    float saved_freq = 0;
+    float saved_phase = 0;
+    bool phase_end = false;
 
-    float GetFreq() { return freq; }
+    uint16_t noise_sr = 1;
 
-    Instrument GetInstrument() {
-        return instrument;
-    }
-
-    int silences = 0;
-    float GetGain() {
-        return gain;
-    }
+    VoiceState voiceState = VoiceState::stopped;
+    
     float GetSample(float phase) {
-        
+
         switch (instrument) {
         case Instrument::square1:
         case Instrument::square2:
-            
+
             if (voiceOp == VoiceOp::stop) {
-                silences++;
                 return SILENCE;
             }
             if (phase >= 0 && phase < .5) {
@@ -116,6 +107,7 @@ public:
             }
             break;
         case Instrument::triangle:
+        {
             float shifted_phase = phase + .25;
             if (shifted_phase > 1) shifted_phase -= 1.;
             if (shifted_phase >= 0 && shifted_phase < .5) {
@@ -131,6 +123,7 @@ public:
                 std::cout << "phase: " << shifted_phase << "\n";
             }
             break;
+        }
         case Instrument::noise:
             break;
         default:
@@ -140,50 +133,12 @@ public:
 
     }
 
-    std::string ToString() {
-        std::stringstream sstream;
-        sstream << "freq: " + std::to_string(freq) + ", time: " + std::to_string(time);
-        sstream << ", command: ";
-        switch (voiceOp) {
-        case VoiceOp::start:
-            sstream << "start\n";
-            break;
-        case VoiceOp::stop:
-            sstream << "stop\n";
-            break;
-        }
-        return sstream.str();
-    }
-};
-
-enum class VoiceState {stopped, terminating, playing, };
-//if stopped and see a start, go to playing
-//if playing and see a stop, go to terminating
-//if terminating and see another note, go to playing
-//if terminating and note ends, go to stopped
-
-class Voice {
-private:
-    Instrument instrument;
-    std::unique_ptr<VoiceCommand> currentCommand;
-    float gain = 1.0;
-
-    int current_time_index = 0;
-    float saved_time_index = 0;
-    float saved_freq = 0;
-    float saved_phase = 0;
-    bool phase_end = false;
-
-    uint16_t noise_sr = 1;
-
-    VoiceState voiceState = VoiceState::stopped;
-    
     //to ensure sample continuity, when a first note flows directly into a second note,
     //this function adjusts the saved time index to be as if the second note were playing the whole time
     void AdjustTimeIndex() {
         float retPhase = (current_time_index - saved_time_index) / SAMPLES_PER_SECOND * saved_freq;
         float frac = retPhase - (int)retPhase;
-        int time_index_dec = frac * SAMPLES_PER_SECOND / currentCommand->GetFreq();
+        int time_index_dec = frac * SAMPLES_PER_SECOND / freq;
         saved_time_index = current_time_index - time_index_dec;
     }
 
@@ -193,16 +148,18 @@ public:
             gain = in_gain;
         }
         else {
-            currentCommand = std::make_unique<VoiceCommand>(in_freq, current_time_index, in_gain, inOp, in_instrument);
+            freq = in_freq;
+            voiceOp = inOp;
+            start_time_index = current_time_index;//is this even necessary?
         }
     }
 
     float CurrentPhase(int current_time_index) {
         //cached values
-        auto note = currentCommand.get();
-        float start_time_index = note->StartTime();
-        auto note_op = note->GetOp();
-        auto note_freq = note->GetFreq();
+        //auto note = currentCommand.get();
+        //float start_time_index = note->StartTime();
+        //auto note_op = note->GetOp();
+        //auto note_freq = note->GetFreq();
 
         //the final phase we return
         float retPhase;
@@ -210,13 +167,13 @@ public:
         //determine new state based on current note and previous state
         switch (voiceState) {
         case VoiceState::stopped:
-            if (note_op == VoiceOp::start) {
+            if (voiceOp == VoiceOp::start) {
                 saved_time_index = start_time_index;
                 voiceState = VoiceState::playing;
             }
             break;
         case VoiceState::terminating: 
-            if (note_op == VoiceOp::start) {
+            if (voiceOp == VoiceOp::start) {
                 voiceState = VoiceState::playing;
                 AdjustTimeIndex();
             }
@@ -226,10 +183,10 @@ public:
             }
             break;
         case VoiceState::playing:
-            if (note_op == VoiceOp::stop) {
+            if (voiceOp == VoiceOp::stop) {
                 voiceState = VoiceState::terminating;
             }
-            else if ((note_op == VoiceOp::start) && (saved_freq != note_freq)) {
+            else if ((voiceOp == VoiceOp::start) && (saved_freq != freq)) {
                 AdjustTimeIndex();
             }
             break;
@@ -240,7 +197,7 @@ public:
             retPhase = SILENCE;
             break;
         case VoiceState::playing:
-            saved_freq = note_freq;
+            saved_freq = freq;
             retPhase = (current_time_index - saved_time_index) / SAMPLES_PER_SECOND * saved_freq;
             break;
         case VoiceState::terminating:
@@ -265,9 +222,7 @@ public:
     }
     
     float CurrentNoteSample() {
-        auto current_note = currentCommand.get();
-        float retval = current_note->GetSample(CurrentPhase(current_time_index));
-        return retval * gain;
+        return GetSample(CurrentPhase(current_time_index)) * gain;
     }
 
     void GetNextSamples(std::array<float, AUDIO_SAMPLE_CHUNK>& out_buffer) {
@@ -279,11 +234,6 @@ public:
     Voice(Instrument in_instrument) {
         instrument = in_instrument;
         DoCommand(1, 0, VoiceOp::stop, instrument);
-    }
-    std::string ToString() {
-        std::stringstream sstream;
-        sstream << currentCommand->ToString();
-        return sstream.str();
     }
 };
 
@@ -391,14 +341,6 @@ public:
             out_buffer[i] = Mix(triangle_buffer[i], square1_buffer[i], square2_buffer[i]);
         }
         access_mutex.unlock();
-    }
-
-    std::string ToString() {
-        std::stringstream sstream;
-        sstream << "Triangle:\n========\n" << triangle.ToString()
-            << "Square1:\n========\n" << square1.ToString()
-            << "Square2:\n========\n" << square2.ToString();
-        return sstream.str();
     }
 };
 
