@@ -203,6 +203,7 @@
     <ClCompile Include="Main.cpp" />
     <ClCompile Include="InterpreterNESCPU.ixx" />
     <ClCompile Include="MasterClock.ixx" />
+    <ClCompile Include="NESConstants.ixx" />
     <ClCompile Include="NESCPU.ixx" />
     <ClCompile Include="NESIO.ixx" />
     <ClCompile Include="NESRenderer.ixx" />

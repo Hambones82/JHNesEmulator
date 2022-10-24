@@ -3,6 +3,7 @@
 #include <array>
 import APUData;
 import AudioDriver;
+import NESConstants;
 
 export module APU;
 
@@ -78,6 +79,7 @@ private:
 	AudioDriver* audioDriver;
 	EnvelopeUnit square1Envelope{Instrument::square1};
 	EnvelopeUnit square2Envelope{ Instrument::square2 };
+	EnvelopeUnit noiseEnvelope{ Instrument::noise };
 
 	bool reset_4017_triggered = false;
 	uint8_t reset_4017_counter = 0;
@@ -92,15 +94,20 @@ private:
 	}
 
 	void SetDriverFreq(uint16_t timer, Instrument instrument) {
-		float new_freq = 1789773. / (16 * (timer + 1));
-		if (instrument == Instrument::triangle) {
-			new_freq /= 2.0;
-		}
-		if ((new_freq >= 20) && (new_freq < 14000)) {
-			audioDriver->DoVoiceCommand(new_freq, VoiceOp::start, instrument);
+		if (instrument == Instrument::noise) {
+			audioDriver->DoVoiceCommand(timer, VoiceOp::start, instrument);
 		}
 		else {
-			audioDriver->DoVoiceCommand(0, VoiceOp::stop, instrument);
+			float new_freq = NESCPUFreq / (16 * (timer + 1));
+			if (instrument == Instrument::triangle) {
+				new_freq /= 2.0;
+			}
+			if ((new_freq >= 20) && (new_freq < 14000)) {
+				audioDriver->DoVoiceCommand(new_freq, VoiceOp::start, instrument);
+			}
+			else {
+				audioDriver->DoVoiceCommand(0, VoiceOp::stop, instrument);
+			}
 		}
 	}
 	void SetDriverVolume(float vol, Instrument instrument) {
@@ -162,6 +169,9 @@ private:
 		inNoiseData.length_counter_halt = (value & 0b0010'0000) >> 5;
 		inNoiseData.envelopeFlag = (value & 0b0001'0000) ? EnvelopeFlag::constant_time : EnvelopeFlag::envelope;
 		inNoiseData.envelope_period = value & 0x0F;
+		if (inNoiseData.envelopeFlag == EnvelopeFlag::constant_time) {
+			SetDriverVolume((float)(inNoiseData.envelope_period) / 15., Instrument::noise);
+		}
 	}
 	void SetNoise_E_reg(NoiseData& inNoiseData, uint8_t value) {
 		inNoiseData.noise_mode = (value & 0x80) >> 7;
@@ -206,6 +216,14 @@ private:
 				}
 			}
 		}
+		if (!apuData.noiseData.length_counter_halt) {
+			if (apuData.noiseData.length_counter_load > 0) {
+				apuData.noiseData.length_counter_load--;
+				if (apuData.noiseData.length_counter_load == 0) { //is this correct?
+					StopDriver(Instrument::noise);
+				}
+			}
+		}
 	}
 	void ClockEnvTriLin() {
 		if (square1Envelope.Tick() && (apuData.square1Data.envelope_flag == EnvelopeFlag::envelope)) {
@@ -213,6 +231,9 @@ private:
 		}
 		if (square2Envelope.Tick() && (apuData.square2Data.envelope_flag == EnvelopeFlag::envelope)) {
 			audioDriver->DoVolumeCommand(square2Envelope.GetDecayLevelFloat(), Instrument::square2);
+		}
+		if (noiseEnvelope.Tick() && (apuData.noiseData.envelopeFlag == EnvelopeFlag::envelope)) {
+			audioDriver->DoVolumeCommand(noiseEnvelope.GetDecayLevelFloat(), Instrument::noise);
 		}
 		
 		bool can_silence = apuData.triangleData.linear_counter == 1;
@@ -340,10 +361,17 @@ public:
 			//std::cout << "writing to 400B (tri length): " << std::hex << (int)val << "\n";
 			break;
 		case 0x400C:
+			SetNoise_C_reg(apuData.noiseData, val);
+			noiseEnvelope.SetPeriod(apuData.noiseData.envelope_period);
+			noiseEnvelope.SetLoopFlag(apuData.noiseData.length_counter_halt);
 			break;
 		case 0x400E:
+			SetNoise_E_reg(apuData.noiseData, val);
+			SetDriverFreq(apuData.noiseData.timer, Instrument::noise);
+			std::cout << "writing to 400E (noise freq): " << std::hex << (int)val << "\n";
 			break;
 		case 0x400F:
+			SetNoise_F_reg(apuData.noiseData, val);
 			break;
 		case 0x4015:
 			//std::cout << "writing to 4015: " << (int)val << "\n";
