@@ -77,11 +77,15 @@ private:
     //need shift mode
     uint16_t noise_sr = 1;
     float noise_tracker = 0;
+    uint8_t noise_mode = 0;
+    
     VoiceState voiceState = VoiceState::stopped;
     
     void AdvanceNoise(int times) {
         for (int i = 0; i < times; i++) {
-            uint8_t xorbit = (noise_sr & 0x0001) ^ ((noise_sr & 0x0002) >> 1);
+            uint16_t mode_mask = noise_mode ? 0b0000'0000'0100'0000 : 2;
+            uint8_t noise_shift = noise_mode ? 5 : 1;
+            uint8_t xorbit = (noise_sr & 0x0001) ^ ((noise_sr & mode_mask) >> noise_shift);
             noise_sr >>= 1;
             noise_sr &= 0b0011'1111'1111'1111;
             noise_sr |= xorbit << 14;
@@ -157,6 +161,9 @@ private:
     }
 
 public:
+    void SetNoiseMode(uint8_t in_nm) {
+        noise_mode = in_nm;
+    }
     void DoCommand(float in_freq, float in_gain, VoiceOp inOp, Instrument in_instrument) {
         if (inOp == VoiceOp::volume) {
             gain = in_gain;
@@ -306,6 +313,10 @@ public:
         SDL_PauseAudioDevice(device, 0);
     }
     
+    void SetNoiseMode(uint8_t nm) {
+        noise.SetNoiseMode(nm);
+    }
+
     void DoVoiceCommand(float freq, VoiceOp op, Instrument instrument) {
         DoVoiceCommand(freq, 1.0, op, instrument);
     }

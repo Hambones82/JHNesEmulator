@@ -175,6 +175,7 @@ private:
 	}
 	void SetNoise_E_reg(NoiseData& inNoiseData, uint8_t value) {
 		inNoiseData.noise_mode = (value & 0x80) >> 7;
+		audioDriver->SetNoiseMode(inNoiseData.noise_mode);
 		std::array<uint16_t, 0x10> period_lut
 		{4, 8, 16, 32, 64, 96, 128, 160, 202, 254, 380, 508, 762, 1016, 2034, 4068};
 		inNoiseData.timer = period_lut[(value & 0x0F)];
@@ -188,7 +189,6 @@ private:
 		audioDriver->SetTriangleEnabled(value & 0b0000'0100);
 		audioDriver->SetSquare2Enabled(value & 0b0000'0010);
 		audioDriver->SetSquare1Enabled(value & 0b0000'0001);
-
 	}
 
 	void ClockLengthCounters() {
