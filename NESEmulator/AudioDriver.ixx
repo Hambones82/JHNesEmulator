@@ -32,9 +32,6 @@ public:
     int lastSample = SILENCE * 256;
 };
 
-//this needs to be rewritten...
-//playback for device
-
 int fail_counter = 0;
 void PlayAudio(void* userData, Uint8* stream, int len) {
 
@@ -67,13 +64,11 @@ export enum class VoiceOp { start, stop, volume };
 
 struct VoiceCommand {
 private:
-    const float note_spacing = 1.0 / 100000.0;
     float freq;
-    float time; // in beats -- yes.
+    float time; 
     float gain;
     VoiceOp voiceOp;
     Instrument instrument;
-    //float phase?
 public:
     VoiceCommand(float in_freq, float in_time, float in_gain, VoiceOp inOp, Instrument in_instrument) {
         freq = in_freq;
@@ -81,10 +76,6 @@ public:
         gain = in_gain;
         voiceOp = inOp;
         instrument = in_instrument;
-    }
-
-    float JustBefore() {
-        return time - note_spacing;
     }
 
     float StartTime() {
@@ -98,7 +89,6 @@ public:
     Instrument GetInstrument() {
         return instrument;
     }
-
 
     int silences = 0;
     float GetGain() {
@@ -126,7 +116,6 @@ public:
             }
             break;
         case Instrument::triangle:
-        {
             float shifted_phase = phase + .25;
             if (shifted_phase > 1) shifted_phase -= 1.;
             if (shifted_phase >= 0 && shifted_phase < .5) {
@@ -142,7 +131,8 @@ public:
                 std::cout << "phase: " << shifted_phase << "\n";
             }
             break;
-        }
+        case Instrument::noise:
+            break;
         default:
             std::cout << "unhandled instrument\n";
             break;
@@ -183,6 +173,8 @@ private:
     float saved_freq = 0;
     float saved_phase = 0;
     bool phase_end = false;
+
+    uint16_t noise_sr = 1;
 
     VoiceState voiceState = VoiceState::stopped;
     
@@ -273,18 +265,12 @@ public:
     }
     
     float CurrentNoteSample() {
-        //get the sample based on the phase
         auto current_note = currentCommand.get();
         float retval = current_note->GetSample(CurrentPhase(current_time_index));
-        
-        //std::cout << "value: " << retval << "\n";
         return retval * gain;
     }
 
-    //i think we should advance to current time, placing all samples into an output buffer
-    int debug_count_total_samples = 0;
     void GetNextSamples(std::array<float, AUDIO_SAMPLE_CHUNK>& out_buffer) {
-        debug_count_total_samples+= AUDIO_SAMPLE_CHUNK;
         for (int i = 0; i < AUDIO_SAMPLE_CHUNK; i++) {
             current_time_index++;
             out_buffer[i] = CurrentNoteSample();
