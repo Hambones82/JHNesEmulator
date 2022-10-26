@@ -7,16 +7,68 @@ import NESConstants;
 
 export module APU;
 
+class SweepUnit {
+private:
+	Instrument instrument;
+	
+	uint8_t divider_period_reload = 0;
+	uint8_t divider_counter = 0;
+	uint8_t shift_count = 0;
 
+	uint16_t target_timer = 0;
 
+	bool reload_flag = false;
+	bool negate_flag = false;
 
-//when we are playing, just output a play note to audio driver
-//duty cycle can just be update duty cycle...
-//halt remaining time can be handled internally
-//envelope can be handled with set volume commands
-//sweep should be handled internally by setting freq on the audio driver
-//set timer --...  i think this should just set freq
-//length should be handled internally..
+	bool enabled = false;
+public:
+	SweepUnit(Instrument in_instrument) {
+		instrument = in_instrument;
+	}
+
+	void SetValues(SquareData &inSquareData) {
+		enabled = inSquareData.sweep_enabled;
+		divider_period_reload = inSquareData.sweep_period;
+		negate_flag = inSquareData.negate;
+		shift_count = inSquareData.shift_counter;
+		reload_flag = true;
+		//std::cout << "setting values for sweep\n";
+	}
+
+	void UpdateTargetTimer(uint16_t in_timer) {
+		target_timer = in_timer;
+	}
+
+	void Tick(uint16_t &freq_timer) {
+		//std::cout << "ticking sweep unit\n";
+		if (divider_counter == 0) {
+			uint16_t change_amount = freq_timer >> shift_count;
+			if (negate_flag) change_amount *= -1;
+			target_timer = freq_timer + change_amount;
+			if ((instrument == Instrument::square1) && negate_flag) target_timer--;
+		}
+		if((divider_counter == 0) && enabled && !Muting(freq_timer)) {
+			//std::cout << "setting freq timer: " << freq_timer << "\n";
+			freq_timer = target_timer;
+		}
+		if ((divider_counter == 0) || reload_flag) {
+			divider_counter = divider_period_reload;
+			//std::cout << "reloading divider counter: " << std::hex << (int)divider_counter << "\n";
+			reload_flag = false;
+		}
+		if((divider_counter != 0)){
+			if(instrument == Instrument::square1)
+				std::cout << "decrementing divider counter, value: " << std::hex << (int) divider_counter << "\n";
+			divider_counter--;
+		}
+	}
+
+	bool Muting(uint16_t &freq_timer) {
+		if (freq_timer < 8) return true;
+		if (target_timer > 0x07FF) return true;
+		return false;
+	}
+};
 
 class EnvelopeUnit {
 private:
@@ -80,10 +132,11 @@ private:
 	EnvelopeUnit square1Envelope{Instrument::square1};
 	EnvelopeUnit square2Envelope{ Instrument::square2 };
 	EnvelopeUnit noiseEnvelope{ Instrument::noise };
+	SweepUnit square1Sweep{ Instrument::square1 };
+	SweepUnit square2Sweep{ Instrument::square2 };
 
 	bool reset_4017_triggered = false;
 	uint8_t reset_4017_counter = 0;
-
 
 	std::array<uint8_t, 0x20> length_lut{
 			10, 254, 20,  2, 40,  4, 80,  6, 160,  8, 60, 10, 14, 12, 26, 14,
@@ -102,6 +155,12 @@ private:
 			if (instrument == Instrument::triangle) {
 				new_freq /= 2.0;
 			}
+			if (instrument == Instrument::square1) {
+				square1Sweep.UpdateTargetTimer(timer);
+			}
+			if (instrument == Instrument::square2) {
+				square2Sweep.UpdateTargetTimer(timer);
+			}
 			if ((new_freq >= 20) && (new_freq < 14000)) {
 				audioDriver->DoVoiceCommand(new_freq, VoiceOp::start, instrument);
 			}
@@ -118,11 +177,11 @@ private:
 		audioDriver->DoVoiceCommand(1, VoiceOp::stop, instrument);
 	}
 	void SetSquareData_0_reg(SquareData& inSquareData, uint8_t value, Instrument instrument) {
-		inSquareData.duty_cycle = value & 0b1100'0000 >> 6;
-		inSquareData.length_counter_halt = value & 0b0010'0000 >> 5;
+		inSquareData.duty_cycle = (value & 0b1100'0000) >> 6;
+		inSquareData.length_counter_halt = (value & 0b0010'0000) >> 5;
 		inSquareData.envelope_flag = ((value & 0b0001'0000) >> 4) ? EnvelopeFlag::constant_time : EnvelopeFlag::envelope;
 		inSquareData.envelope_period = value & 0x0F;
-		
+		audioDriver->SetDutyCycle(inSquareData.duty_cycle, instrument);
 		if (inSquareData.envelope_flag == EnvelopeFlag::constant_time) {
 			SetDriverVolume((float)(inSquareData.envelope_period) / 15., instrument);
 		}
@@ -224,6 +283,22 @@ private:
 				}
 			}
 		}
+		square1Sweep.Tick(apuData.square1Data.timer);
+		square2Sweep.Tick(apuData.square2Data.timer);
+		if (!square1Sweep.Muting(apuData.square1Data.timer)) {
+			SetDriverFreq(apuData.square1Data.timer, Instrument::square1);
+		}
+		else {
+			StopDriver(Instrument::square1);
+		}
+		//a few problems with this -- this is probably overriding the note lengths and whatnot... need to check whether other conditions for
+		//being off are met...  might need somewhat of a rewrite...
+		if (!square2Sweep.Muting(apuData.square2Data.timer)) {
+			SetDriverFreq(apuData.square2Data.timer, Instrument::square2);
+		}
+		else {
+			StopDriver(Instrument::square2);
+		}
 	}
 	void ClockEnvTriLin() {
 		if (square1Envelope.Tick() && (apuData.square1Data.envelope_flag == EnvelopeFlag::envelope)) {
@@ -256,12 +331,10 @@ private:
 
 	}
 public:
-	//for now, just try setting frequency, have the audio driver play samples based on the set freq.
 	APU(AudioDriver *in_audioDriver) {
 		audioDriver = in_audioDriver;
 	}
 	void Tick() {
-		//update apuData based on timing
 		apuData.APUcycles += .5;
 		switch (apuData.mode) {
 		case frameCounterMode::mode_4_step:
@@ -299,10 +372,6 @@ public:
 			}
 		}
 	}
-	//the apu has to be clocked...
-	//maybe we need a clock method?  so clock this, it'll take care of all the modifications such as sweep
-	//something else, not sure...
-	//yeah, clock the cpu, advance state, etc...  only thing is to just not implement the sequencer
 	void WriteReg(uint16_t regNum, uint8_t val) {
 		if (!(regNum >= 0x4000 && regNum <= 0x4013) && regNum != 0x4015 && regNum != 0x4017) {
 			std::cout << "error: writing to a register that isn't handled by the APU\n";
@@ -317,6 +386,8 @@ public:
 			break;
 		case 0x4001:
 			SetSquareData_1_reg(apuData.square1Data, val);
+			square1Sweep.SetValues(apuData.square1Data);
+			//std::cout << "square 1 sweep, setting values" << std::hex << (int)val << "\n";
 			break;
 		case 0x4002:
 			SetSquareData_2_reg(apuData.square1Data, val);
@@ -334,6 +405,8 @@ public:
 			break;
 		case 0x4005:
 			SetSquareData_1_reg(apuData.square2Data, val);
+			square2Sweep.SetValues(apuData.square2Data);
+			//std::cout << "square 2 sweep, setting values" << std::hex << (int)val << "\n";
 			break;
 		case 0x4006:
 			SetSquareData_2_reg(apuData.square2Data, val);
@@ -368,7 +441,7 @@ public:
 		case 0x400E:
 			SetNoise_E_reg(apuData.noiseData, val);
 			SetDriverFreq(apuData.noiseData.timer, Instrument::noise);
-			std::cout << "writing to 400E (noise freq): " << std::hex << (int)val << "\n";
+			//std::cout << "writing to 400E (noise freq): " << std::hex << (int)val << "\n";
 			break;
 		case 0x400F:
 			SetNoise_F_reg(apuData.noiseData, val);
@@ -385,6 +458,5 @@ public:
 			//std::cout << "writing to 4017 (frame counter): " << std::hex << (int)val << "\n";
 			break;
 		}
-		//whenever there is an update to necessary parameters, do that update.
 	}
 };

@@ -80,6 +80,8 @@ private:
     uint8_t noise_mode = 0;
     
     VoiceState voiceState = VoiceState::stopped;
+
+    uint8_t duty_cycle;
     
     void AdvanceNoise(int times) {
         for (int i = 0; i < times; i++) {
@@ -93,17 +95,20 @@ private:
     }
 
     float GetSample(float phase) {
+        constexpr std::array<std::array<float, 8>, 4> duty_cycle_sequences{ {
+            {0, 1, 0, 0, 0, 0, 0, 0},
+            {0, 1, 1, 0, 0, 0, 0, 0},
+            {0, 1, 1, 1, 1, 0, 0, 0},
+            {1, 0, 0, 1, 1, 1, 1, 1}
+        } };
         switch (instrument) {
         case Instrument::square1:
         case Instrument::square2:
             if (voiceOp == VoiceOp::stop) {
                 return SILENCE;
             }
-            if (phase >= 0 && phase < .5) {
-                return 0;
-            }
-            else if (phase >= .5 && phase <= 1.0) {
-                return 1;
+            else if ((phase >= 0) && (phase < 1.0)) {
+                return duty_cycle_sequences[duty_cycle][(int)(phase * 8)];
             }
             else {
                 std::cout << "sample generation problem in note\n";
@@ -161,6 +166,9 @@ private:
     }
 
 public:
+    void SetDutyCycle(uint8_t in_duty_cycle) {
+        duty_cycle = in_duty_cycle;
+    }
     void SetNoiseMode(uint8_t in_nm) {
         noise_mode = in_nm;
     }
@@ -288,6 +296,16 @@ public:
     void SetNoiseEnabled(uint8_t value) {
         en_noise = value ? true : false;
     }
+    void SetDutyCycle(uint8_t in_dc, Instrument in_instrument) {
+        switch (in_instrument) {
+        case Instrument::square1:
+            square1.SetDutyCycle(in_dc);
+            break;
+        case Instrument::square2:
+            square2.SetDutyCycle(in_dc);
+            break;
+        }
+    }
     SDL_AudioDeviceID GetDeviceID() {
         return device;
     }
@@ -344,7 +362,7 @@ public:
     }
 
     float Mix(float triangle, float square1, float square2, float noise) {
-        
+        //return square1;
         return triangle * en_triangle * .55 + square1 * en_square1 * .15 + square2 * en_square2 * .15 + noise * .15;
     }
     std::array<float, AUDIO_SAMPLE_CHUNK> triangle_buffer;
@@ -390,11 +408,11 @@ export void AudioThread(AudioDriver *audioDriver) {
 
     while (true) {
         sample_counter++;
-        /*
+        
         if ((sample_counter > 1000000) && !log_samples_triggered) {
             log_samples = true;
             log_samples_triggered = true;
-        }*/
+        }
         int writeBuff = audioDriver->aBufferData.nextBufferToWrite;
         if (audioDriver->aBufferData.bufferReadyToWrite[writeBuff]) {
             audioDriver->GetSamples(float_sample_buffer);
