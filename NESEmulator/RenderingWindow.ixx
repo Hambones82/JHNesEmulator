@@ -1,6 +1,9 @@
 #include <SDL.h>
 #include <iostream>
 #include <SDL_ttf.h>
+#include <chrono>
+
+import NESConstants;
 
 export module RenderingWindow;
 
@@ -35,6 +38,9 @@ private:
 	bool usebuffer1 = true;
 
 	bool texture_locked = false;
+	std::chrono::time_point<std::chrono::system_clock> prev_frame_time;
+	std::chrono::duration<double> frame_time{ 1. / (FPS * RUNTIME_SPEED_MULTIPLIER) };
+	//std::chrono::time_point<std::chrono::system_clock> next_frame_time;
 	//TTF_Font* Debug_Font;
 public:
 	RenderingWindow()
@@ -53,6 +59,7 @@ public:
 		SDL_SetHint(SDL_HINT_RENDER_SCALE_QUALITY, "2");
 		SDL_CreateWindowAndRenderer(window_width * scale_factor, window_height * scale_factor, SDL_WINDOW_SHOWN, &window, &renderer);
 		renderTexture = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_RGB888, SDL_TEXTUREACCESS_STREAMING, window_width, window_height);
+		prev_frame_time = std::chrono::system_clock::now();
 		//debugTexture = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_RGB888, SDL_TEXTUREACCESS_STREAMING, screen_width, screen_height);
 	}
 	bool frame_markers_debug = false;
@@ -70,6 +77,7 @@ public:
 
 	}
 	uint8_t frame_counter = 0;
+	
 	void EndFrame()
 	{	
 		//for (int i = 0; i < (10 * 10); i++) { //wtf???
@@ -87,6 +95,20 @@ public:
 			SDL_RenderCopy(renderer, renderTexture, NULL, NULL);
 			//SDL_RenderCopy(renderer, debugTexture, NULL, NULL);
 			SDL_RenderPresent(renderer);
+			//timing
+			std::chrono::duration<double, std::milli> time_since_last_frame = 
+				std::chrono::system_clock::now() - prev_frame_time;
+			if (time_since_last_frame < frame_time) {
+				//std::chrono::duration<double, std::milli> sleep_time = frame_time - time_since_last_frame;
+				//std::this_thread::sleep_for(sleep_time); 
+				std::this_thread::sleep_until(prev_frame_time + frame_time);
+				prev_frame_time = prev_frame_time + std::chrono::duration_cast<std::chrono::milliseconds>(frame_time);
+			}
+
+			else {
+				prev_frame_time = std::chrono::system_clock::now();
+			}
+
 		}
 		
 		if (frame_markers_debug) {

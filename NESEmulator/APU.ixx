@@ -57,9 +57,10 @@ public:
 			reload_flag = false;
 		}
 		if((divider_counter != 0)){
-			if(instrument == Instrument::square1)
-				std::cout << "decrementing divider counter, value: " << std::hex << (int) divider_counter << "\n";
-			divider_counter--;
+			//if(instrument == Instrument::square1)
+			//	std::cout << "decrementing divider counter, value: " << std::hex << (int) divider_counter << "\n";
+			if (instrument == Instrument::square1)
+				divider_counter--;
 		}
 	}
 
@@ -155,13 +156,20 @@ private:
 			if (instrument == Instrument::triangle) {
 				new_freq /= 2.0;
 			}
+			bool is_silenced = false;
 			if (instrument == Instrument::square1) {
 				square1Sweep.UpdateTargetTimer(timer);
+				if (apuData.square1Data.length_counter == 0) {
+					is_silenced = true;
+				}
 			}
 			if (instrument == Instrument::square2) {
 				square2Sweep.UpdateTargetTimer(timer);
+				if (apuData.square2Data.length_counter == 0) {
+					is_silenced = true;
+				}
 			}
-			if ((new_freq >= 20) && (new_freq < 14000)) {
+			if ((new_freq >= 20) && (new_freq < 14000) && !is_silenced) {//need to silence when silenced by length, possibly others.
 				audioDriver->DoVoiceCommand(new_freq, VoiceOp::start, instrument);
 			}
 			else {
