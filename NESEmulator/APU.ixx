@@ -50,16 +50,30 @@ public:
 			std::cout << " enabled\n";
 		}
 		*/
-		
+		if (instrument == Instrument::square1)
+		{
+			std::cout << "new tick\n=============\n";
+			if (!enabled) {
+				std::cout << "not";
+			}
+			std::cout << " enabled\n";
+			std::cout << "shift count: " << (int)shift_count << "\n";
+		}
 		if (divider_counter == 0) {
 			uint16_t change_amount = freq_timer >> shift_count;
 			if (negate_flag) change_amount *= -1;
 			target_timer = freq_timer + change_amount;
-			if ((instrument == Instrument::square1) && negate_flag) target_timer--;
+			if ((instrument == Instrument::square1) && negate_flag) {
+				target_timer--; //is this correct???
+				std::cout << "additional minus from negate flag\n";
+			}
+				if(instrument == Instrument::square1)
+					std::cout << "target timer: " << (int)target_timer << "\n";
 		}
 		if((divider_counter == 0) && enabled && !Muting(freq_timer)) {
-			//std::cout << "setting freq timer: " << freq_timer << "\n";
 			freq_timer = target_timer;
+			if (instrument == Instrument::square1)
+				std::cout << "setting freq timer: " << freq_timer << "\n";
 		}
 		if ((divider_counter == 0) || reload_flag) {
 			divider_counter = divider_period_reload;
@@ -272,7 +286,7 @@ private:
 		if (!apuData.square1Data.length_counter_halt) {
 			if (apuData.square1Data.length_counter > 0) {
 				apuData.square1Data.length_counter--;
-				std::cout << "square 1 length counter: " << std::hex << (int)(apuData.square1Data.length_counter) << "\n";
+				//std::cout << "square 1 length counter: " << std::hex << (int)(apuData.square1Data.length_counter) << "\n";
 				if (apuData.square1Data.length_counter == 0) {
 					StopDriver(Instrument::square1);
 				}
@@ -303,7 +317,7 @@ private:
 			}
 		}
 		square1Sweep.Tick(apuData.square1Data.timer);
-		square2Sweep.Tick(apuData.square2Data.timer);
+		
 		if (!square1Sweep.Muting(apuData.square1Data.timer)) {
 			SetDriverFreq(apuData.square1Data.timer, Instrument::square1);
 		}
@@ -312,6 +326,7 @@ private:
 		}
 		//a few problems with this -- this is probably overriding the note lengths and whatnot... need to check whether other conditions for
 		//being off are met...  might need somewhat of a rewrite...
+		square2Sweep.Tick(apuData.square2Data.timer);
 		if (!square2Sweep.Muting(apuData.square2Data.timer)) {
 			SetDriverFreq(apuData.square2Data.timer, Instrument::square2);
 		}
@@ -391,7 +406,9 @@ public:
 			}
 		}
 	}
-	bool reg_write_debug_out = false;
+	bool sq_1_debug = true;
+	bool sq_2_debug = false;
+	bool tri_debug = false;
 	void WriteReg(uint16_t regNum, uint8_t val) {
 		if (!(regNum >= 0x4000 && regNum <= 0x4013) && regNum != 0x4015 && regNum != 0x4017) {
 			std::cout << "error: writing to a register that isn't handled by the APU\n";
@@ -400,7 +417,7 @@ public:
 		switch (regNum) {
 		case 0x4000:
 			SetSquareData_0_reg(apuData.square1Data, val, Instrument::square1);
-			if (reg_write_debug_out) {
+			if (sq_1_debug) {
 				std::cout << std::hex << "writing to 4000 (duty cycle, lenght halt, volume): " << (int)val << "\n";
 			}
 			square1Envelope.SetPeriod(apuData.square1Data.envelope_period);
@@ -409,50 +426,50 @@ public:
 		case 0x4001:
 			SetSquareData_1_reg(apuData.square1Data, val);
 			square1Sweep.SetValues(apuData.square1Data);
-			if (reg_write_debug_out) {
-				std::cout << "square 1 sweep, setting values" << std::hex << (int)val << "\n";
+			if (sq_1_debug) {
+				std::cout << "writing to 4001: square 1 sweep, setting values" << std::hex << (int)val << "\n";
 			}
 			break;
 		case 0x4002:
 			SetSquareData_2_reg(apuData.square1Data, val);
 			SetDriverFreq(apuData.square1Data.timer, Instrument::square1);
-			if (reg_write_debug_out) {
-				std::cout << "square 1 set driver freq: " << (int)(apuData.square1Data.timer) << "\n";
+			if (sq_1_debug) {
+				std::cout << "writing to 4002: square 1 set driver freq: " << (int)(apuData.square1Data.timer) << "\n";
 			}
 			break;
 		case 0x4003:
 			SetSquareData_3_reg(apuData.square1Data, val);
 			SetDriverFreq(apuData.square1Data.timer, Instrument::square1);
-			//if (reg_write_debug_out) {
-				//std::cout << "writing to 4003 (pulse1 length): " << (int)val << "\n";
-			//}
+			if (sq_1_debug) {
+				std::cout << "writing to 4003 (pulse1 length): " << (int)val << "\n";
+			}
 			break;
 		case 0x4004:
 			SetSquareData_0_reg(apuData.square2Data, val, Instrument::square2);
 			square2Envelope.SetPeriod(apuData.square2Data.envelope_period);
 			square2Envelope.SetLoopFlag(apuData.square2Data.length_counter_halt);
-			if (reg_write_debug_out) {
+			if (sq_2_debug) {
 				std::cout << std::hex << "writing to 4004 (duty cycle, lenght halt, volume): " << (int)val << "\n";
 			}
 			break;
 		case 0x4005:
 			SetSquareData_1_reg(apuData.square2Data, val);
 			square2Sweep.SetValues(apuData.square2Data);
-			if (reg_write_debug_out) {
+			if (sq_2_debug) {
 				std::cout << "square 2 sweep, setting values" << std::hex << (int)val << "\n";
 			}
 			break;
 		case 0x4006:
 			SetSquareData_2_reg(apuData.square2Data, val);
 			SetDriverFreq(apuData.square2Data.timer, Instrument::square2);
-			if (reg_write_debug_out) {
+			if (sq_2_debug) {
 				std::cout << "square 2 set driver freq: " << (int)(apuData.square2Data.timer) << "\n";
 			}
 			break;
 		case 0x4007:
 			SetSquareData_3_reg(apuData.square2Data, val);
 			SetDriverFreq(apuData.square2Data.timer, Instrument::square2);
-			if (reg_write_debug_out) {
+			if (sq_2_debug) {
 				std::cout << "writing to 4007 (pulse2 length): " << (int)val << "\n";
 			}
 			break;
@@ -484,6 +501,9 @@ public:
 			break;
 		case 0x400F:
 			SetNoise_F_reg(apuData.noiseData, val);
+			break;
+		case 0x4011:
+			std::cout << "writing to DMC 4011 (for tri/square vol ctrl?): " << (int)val << "\n";
 			break;
 		case 0x4015:
 			//std::cout << "writing to 4015: " << (int)val << "\n";

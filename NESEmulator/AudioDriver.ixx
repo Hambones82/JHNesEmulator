@@ -363,7 +363,7 @@ public:
 
     float Mix(float triangle, float square1, float square2, float noise) {
         //return square1;
-        return triangle * en_triangle * .55 + square1 * en_square1 * .15 + square2 * en_square2 * .15 + en_noise * noise * .15;
+        return square1;// triangle* en_triangle * .55 + square1 * en_square1 * .15 + square2 * en_square2 * .15 + en_noise * noise * .15;
     }
     std::array<float, AUDIO_SAMPLE_CHUNK> triangle_buffer;
     std::array<float, AUDIO_SAMPLE_CHUNK> square1_buffer;
@@ -408,11 +408,11 @@ export void AudioThread(AudioDriver *audioDriver) {
 
     while (true) {
         sample_counter++;
-        
+        /*
         if ((sample_counter > 1000000) && !log_samples_triggered) {
             log_samples = true;
             log_samples_triggered = true;
-        }
+        }*/
         int writeBuff = audioDriver->aBufferData.nextBufferToWrite;
         if (audioDriver->aBufferData.bufferReadyToWrite[writeBuff]) {
             audioDriver->GetSamples(float_sample_buffer);
