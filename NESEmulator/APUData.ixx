@@ -8,7 +8,7 @@ export enum class EnvelopeFlag {constant_time, envelope};
 export struct SquareData {
 	uint8_t duty_cycle = 0;//?
 	bool length_counter_halt = false;
-	uint8_t length_counter = 0; //duration of the note
+	uint8_t length_counter = 0; //duration of the note -- doesn't seem correct...
 	uint16_t timer = 0; //sets freq.  period is t + 1 APU cycles
 	EnvelopeFlag envelope_flag = EnvelopeFlag::constant_time;
 	uint8_t envelope_period = 0;

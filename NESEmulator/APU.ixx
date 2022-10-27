@@ -39,6 +39,7 @@ public:
 		target_timer = in_timer;
 	}
 
+	bool sweep_debug = false;
 	void Tick(uint16_t &freq_timer) {
 		//std::cout << "ticking sweep unit\n";
 		/*
@@ -50,7 +51,7 @@ public:
 			std::cout << " enabled\n";
 		}
 		*/
-		if (instrument == Instrument::square1)
+		if ((instrument == Instrument::square1) && sweep_debug)
 		{
 			std::cout << "new tick\n=============\n";
 			if (!enabled) {
@@ -65,15 +66,15 @@ public:
 			target_timer = freq_timer + change_amount;
 			if ((instrument == Instrument::square1) && negate_flag) {
 				target_timer--; //is this correct???
-				std::cout << "additional minus from negate flag\n";
+				if(sweep_debug) std::cout << "additional minus from negate flag\n";
 			}
 				if(instrument == Instrument::square1)
-					std::cout << "target timer: " << (int)target_timer << "\n";
+					if (sweep_debug) std::cout << "target timer: " << (int)target_timer << "\n";
 		}
 		if((divider_counter == 0) && enabled && !Muting(freq_timer)) {
 			freq_timer = target_timer;
 			if (instrument == Instrument::square1)
-				std::cout << "setting freq timer: " << freq_timer << "\n";
+				if (sweep_debug) std::cout << "setting freq timer: " << freq_timer << "\n";
 		}
 		if ((divider_counter == 0) || reload_flag) {
 			divider_counter = divider_period_reload;
@@ -277,6 +278,18 @@ private:
 	}
 
 	void SetStatus(uint8_t value) {
+		if (!(value & 1)) {
+			apuData.square1Data.length_counter = 0;
+		}
+		if (!(value & 2)) {
+			apuData.square2Data.length_counter = 0;
+		}
+		if (!(value & 4)) {
+			apuData.triangleData.length_counter = 0;
+		}
+		if (!(value & 8)) {
+			apuData.noiseData.length_counter_load = 0;
+		}
 		audioDriver->SetTriangleEnabled(value & 0b0000'0100);
 		audioDriver->SetSquare2Enabled(value & 0b0000'0010);
 		audioDriver->SetSquare1Enabled(value & 0b0000'0001);
@@ -406,7 +419,7 @@ public:
 			}
 		}
 	}
-	bool sq_1_debug = true;
+	bool sq_1_debug = false;
 	bool sq_2_debug = false;
 	bool tri_debug = false;
 	void WriteReg(uint16_t regNum, uint8_t val) {
@@ -503,10 +516,12 @@ public:
 			SetNoise_F_reg(apuData.noiseData, val);
 			break;
 		case 0x4011:
-			std::cout << "writing to DMC 4011 (for tri/square vol ctrl?): " << (int)val << "\n";
+			//std::cout << "writing to DMC 4011 (for tri/square vol ctrl?): " << (int)val << "\n";
 			break;
 		case 0x4015:
 			//std::cout << "writing to 4015: " << (int)val << "\n";
+			//if(val)
+			//	std::cout << "writing to 4015: " << (int)val << "\n";
 			SetStatus(val);
 			break;
 		case 0x4017:
