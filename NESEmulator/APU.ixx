@@ -41,6 +41,16 @@ public:
 
 	void Tick(uint16_t &freq_timer) {
 		//std::cout << "ticking sweep unit\n";
+		/*
+		if (instrument == Instrument::square1)
+		{
+			if (!enabled) {
+				std::cout << "not";
+			}
+			std::cout << " enabled\n";
+		}
+		*/
+		
 		if (divider_counter == 0) {
 			uint16_t change_amount = freq_timer >> shift_count;
 			if (negate_flag) change_amount *= -1;
@@ -158,8 +168,8 @@ private:
 			}
 			bool is_silenced = false;
 			if (instrument == Instrument::square1) {
-				square1Sweep.UpdateTargetTimer(timer);
-				if (apuData.square1Data.length_counter == 0) {
+				square1Sweep.UpdateTargetTimer(timer); 
+				if (apuData.square1Data.length_counter == 0) { //this could be a problem...
 					is_silenced = true;
 				}
 			}
@@ -262,6 +272,7 @@ private:
 		if (!apuData.square1Data.length_counter_halt) {
 			if (apuData.square1Data.length_counter > 0) {
 				apuData.square1Data.length_counter--;
+				std::cout << "square 1 length counter: " << std::hex << (int)(apuData.square1Data.length_counter) << "\n";
 				if (apuData.square1Data.length_counter == 0) {
 					StopDriver(Instrument::square1);
 				}
@@ -380,6 +391,7 @@ public:
 			}
 		}
 	}
+	bool reg_write_debug_out = false;
 	void WriteReg(uint16_t regNum, uint8_t val) {
 		if (!(regNum >= 0x4000 && regNum <= 0x4013) && regNum != 0x4015 && regNum != 0x4017) {
 			std::cout << "error: writing to a register that isn't handled by the APU\n";
@@ -388,42 +400,61 @@ public:
 		switch (regNum) {
 		case 0x4000:
 			SetSquareData_0_reg(apuData.square1Data, val, Instrument::square1);
-			//std::cout <<std::hex<< "writing to 4000 (duty cycle, lenght halt, volume): " << (int)val << "\n";
+			if (reg_write_debug_out) {
+				std::cout << std::hex << "writing to 4000 (duty cycle, lenght halt, volume): " << (int)val << "\n";
+			}
 			square1Envelope.SetPeriod(apuData.square1Data.envelope_period);
 			square1Envelope.SetLoopFlag(apuData.square1Data.length_counter_halt);
 			break;
 		case 0x4001:
 			SetSquareData_1_reg(apuData.square1Data, val);
 			square1Sweep.SetValues(apuData.square1Data);
-			//std::cout << "square 1 sweep, setting values" << std::hex << (int)val << "\n";
+			if (reg_write_debug_out) {
+				std::cout << "square 1 sweep, setting values" << std::hex << (int)val << "\n";
+			}
 			break;
 		case 0x4002:
 			SetSquareData_2_reg(apuData.square1Data, val);
 			SetDriverFreq(apuData.square1Data.timer, Instrument::square1);
+			if (reg_write_debug_out) {
+				std::cout << "square 1 set driver freq: " << (int)(apuData.square1Data.timer) << "\n";
+			}
 			break;
 		case 0x4003:
 			SetSquareData_3_reg(apuData.square1Data, val);
 			SetDriverFreq(apuData.square1Data.timer, Instrument::square1);
-			//std::cout << "writing to 4003 (pulse1 length): " << (int)val << "\n";
+			//if (reg_write_debug_out) {
+				//std::cout << "writing to 4003 (pulse1 length): " << (int)val << "\n";
+			//}
 			break;
 		case 0x4004:
 			SetSquareData_0_reg(apuData.square2Data, val, Instrument::square2);
 			square2Envelope.SetPeriod(apuData.square2Data.envelope_period);
 			square2Envelope.SetLoopFlag(apuData.square2Data.length_counter_halt);
+			if (reg_write_debug_out) {
+				std::cout << std::hex << "writing to 4004 (duty cycle, lenght halt, volume): " << (int)val << "\n";
+			}
 			break;
 		case 0x4005:
 			SetSquareData_1_reg(apuData.square2Data, val);
 			square2Sweep.SetValues(apuData.square2Data);
-			//std::cout << "square 2 sweep, setting values" << std::hex << (int)val << "\n";
+			if (reg_write_debug_out) {
+				std::cout << "square 2 sweep, setting values" << std::hex << (int)val << "\n";
+			}
 			break;
 		case 0x4006:
 			SetSquareData_2_reg(apuData.square2Data, val);
 			SetDriverFreq(apuData.square2Data.timer, Instrument::square2);
+			if (reg_write_debug_out) {
+				std::cout << "square 2 set driver freq: " << (int)(apuData.square2Data.timer) << "\n";
+			}
 			break;
 		case 0x4007:
 			SetSquareData_3_reg(apuData.square2Data, val);
 			SetDriverFreq(apuData.square2Data.timer, Instrument::square2);
-			//std::cout << "writing to 4007 (pulse2 length): " << (int)val << "\n";
+			if (reg_write_debug_out) {
+				std::cout << "writing to 4007 (pulse2 length): " << (int)val << "\n";
+			}
 			break;
 		case 0x4008:
 			SetTriData_8_reg(apuData.triangleData, val);
@@ -466,5 +497,19 @@ public:
 			//std::cout << "writing to 4017 (frame counter): " << std::hex << (int)val << "\n";
 			break;
 		}
+	}
+	uint8_t ReadReg(uint16_t address) {
+		
+		switch (address) {
+		case 0x4015:
+			//uint8_t noise = apuData.noiseData.l //need to implement noise length counter
+			uint8_t tri = (apuData.triangleData.length_counter > 0) ? 4 : 0;
+			uint8_t sq2 = (apuData.square2Data.length_counter > 0) ? 2 : 0;
+			uint8_t sq1 = (apuData.square1Data.length_counter > 0) ? 1 : 0;
+			return tri + sq2 + sq1;
+			break;
+		}
+		
+		return 0;
 	}
 };

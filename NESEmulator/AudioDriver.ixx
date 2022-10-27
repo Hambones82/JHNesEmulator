@@ -363,7 +363,7 @@ public:
 
     float Mix(float triangle, float square1, float square2, float noise) {
         //return square1;
-        return triangle * en_triangle * .55 + square1 * en_square1 * .15 + square2 * en_square2 * .15 + noise * .15;
+        return triangle * en_triangle * .55 + square1 * en_square1 * .15 + square2 * en_square2 * .15 + en_noise * noise * .15;
     }
     std::array<float, AUDIO_SAMPLE_CHUNK> triangle_buffer;
     std::array<float, AUDIO_SAMPLE_CHUNK> square1_buffer;

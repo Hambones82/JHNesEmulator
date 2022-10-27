@@ -74,6 +74,9 @@ private:
 			//std::cout << "reading: " << address << "val: " << (int)read_val << "\n";
 			return read_val;
 		}
+		else if (address == 0x4015) {
+			return apu->ReadReg(address);
+		}
 		else if (address == 0x4016) {
 			return nesIO->readIOReg(IOReg::reg4016);
 		}
