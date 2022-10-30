@@ -18,16 +18,10 @@
     <ClCompile Include="Main.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="NESRenderer.ixx">
-      <Filter>Source Files</Filter>
-    </ClCompile>
     <ClCompile Include="NESCPU.ixx">
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="NES_Memory_System.ixx">
-      <Filter>Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="InterpreterNESCPU.ixx">
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="RomLoader.ixx">
@@ -37,9 +31,6 @@
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="nestestloader.ixx">
-      <Filter>Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="PPUMemorySystem.ixx">
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="CartridgeMem.ixx">

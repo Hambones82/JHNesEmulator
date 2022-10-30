@@ -178,10 +178,13 @@ private:
 		}
 		else {
 			float new_freq = NESCPUFreq / (16 * (timer + 1));
+			bool is_silenced = false;
 			if (instrument == Instrument::triangle) {
+				if (apuData.triangleData.length_counter == 0) {
+					is_silenced = true;
+				}
 				new_freq /= 2.0;
 			}
-			bool is_silenced = false;
 			if (instrument == Instrument::square1) {
 				square1Sweep.UpdateTargetTimer(timer); 
 				if (apuData.square1Data.length_counter == 0) { //this could be a problem...
@@ -280,15 +283,19 @@ private:
 	void SetStatus(uint8_t value) {
 		if (!(value & 1)) {
 			apuData.square1Data.length_counter = 0;
+			StopDriver(Instrument::square1);
 		}
 		if (!(value & 2)) {
 			apuData.square2Data.length_counter = 0;
+			StopDriver(Instrument::square2);
 		}
 		if (!(value & 4)) {
 			apuData.triangleData.length_counter = 0;
+			StopDriver(Instrument::triangle);
 		}
 		if (!(value & 8)) {
 			apuData.noiseData.length_counter_load = 0;
+			StopDriver(Instrument::noise);
 		}
 		audioDriver->SetTriangleEnabled(value & 0b0000'0100);
 		audioDriver->SetSquare2Enabled(value & 0b0000'0010);
