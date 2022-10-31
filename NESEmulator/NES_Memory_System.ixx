@@ -1,3 +1,4 @@
+module;
 #include <cstdint>
 #include <array>
 #include <string>
@@ -6,11 +7,11 @@
 #include <iostream>
 #include<iomanip>
 
+export module NES_Memory_System;
 import PPU;
 import NESIO;
 import CartridgeMem;
 import APU;
-export module NES_Memory_System;
 
 const uint16_t banks_in_addr_space = UINT16_MAX +1 / bank_size;
 const uint16_t max_banks = 32;

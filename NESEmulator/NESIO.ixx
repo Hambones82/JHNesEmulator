@@ -1,7 +1,7 @@
+module;
 #include <stdint.h>
-import PlatformIO;
-
 export module NESIO;
+import PlatformIO;
 
 export enum class IOReg {reg4016, reg4017};
 

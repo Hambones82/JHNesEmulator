@@ -1,3 +1,4 @@
+module;
 #include <SDL.h>
 #include <stdint.h>
 export module PlatformIO;

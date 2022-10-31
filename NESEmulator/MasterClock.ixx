@@ -1,5 +1,5 @@
+module;
 #include <stdint.h>
-
 export module MasterClock;
 import PPU;
 import APU;

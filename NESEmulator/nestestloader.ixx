@@ -1,4 +1,4 @@
-import NESCPU_state;
+module;
 #include <vector>
 #include <fstream>
 #include <string>
@@ -7,7 +7,7 @@ import NESCPU_state;
 
 
 export module nestestloader;
-
+import NESCPU_state;
 export int hexStrtoInt(std::string str) {
 	std::stringstream ss;
 	ss << std::hex << str;

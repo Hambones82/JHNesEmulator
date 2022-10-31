@@ -1,12 +1,14 @@
+module;
 #include<chrono>
 #include <stdint.h>
 #include <iostream>
 #include <array>
 
-class NES_Memory_System;
-
-import RenderingWindow;
 export module PPU;
+
+class NES_Memory_System;
+import RenderingWindow;
+//import NES_Memory_System;
 
 export class PPU {
 private:

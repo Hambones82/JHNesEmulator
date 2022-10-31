@@ -1,11 +1,12 @@
+module;
 #include <SDL.h>
 #include <iostream>
 #include <SDL_ttf.h>
 #include <chrono>
 
+export module RenderingWindow;
 import NESConstants;
 
-export module RenderingWindow;
 
 export class RenderingWindow {
 private:

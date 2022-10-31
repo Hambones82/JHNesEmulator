@@ -1,12 +1,13 @@
+module;
 #include <stdint.h>
 #include <iostream>
 #include <array>
+
+
+export module APU;
 import APUData;
 import AudioDriver;
 import NESConstants;
-
-export module APU;
-
 class SweepUnit {
 private:
 	Instrument instrument;

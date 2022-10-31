@@ -206,6 +206,7 @@
     <ClCompile Include="NESCPU.ixx" />
     <ClCompile Include="NESIO.ixx" />
     <ClCompile Include="NESCPUState.ixx" />
+    <ClCompile Include="NESMain.ixx" />
     <ClCompile Include="nestestloader.ixx" />
     <ClCompile Include="NES_Memory_System.ixx" />
     <ClCompile Include="PlatformIO.ixx" />

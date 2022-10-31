@@ -1,3 +1,4 @@
+module;
 #include <assert.h>
 #include <sdl.h>
 #include <iostream>
@@ -8,6 +9,7 @@
 #include <chrono>
 #include <mutex>
 #include "AudioFile.h"
+
 
 export module AudioDriver;
 import APUData;

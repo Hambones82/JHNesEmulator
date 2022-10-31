@@ -1,3 +1,4 @@
+module;
 #include <cstdint>
 #include <array>
 #include <utility>
@@ -9,10 +10,10 @@
 
 //i think brk is broken...
 
+export module NESCPU;
 import NES_Memory_System;
 import NESCPU_state;
 import MasterClock;
-export module NESCPU;
 
 export class NESCPU {
 private:

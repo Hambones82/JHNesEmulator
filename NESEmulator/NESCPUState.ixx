@@ -1,3 +1,4 @@
+module;
 #include <stdint.h>
 
 export module NESCPU_state;

@@ -1,5 +1,4 @@
-import NES_Memory_System;
-
+module;
 #include <stdint.h>
 #include <string>
 #include <fstream>
@@ -7,6 +6,7 @@ import NES_Memory_System;
 #include <vector>
 #include<array>
 export module NESROMLoader;
+import NES_Memory_System;
 
 export union {
 	uint8_t bytes[15];
