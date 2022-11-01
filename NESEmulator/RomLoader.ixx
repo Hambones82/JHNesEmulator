@@ -101,7 +101,7 @@ public:
 			
 		}
 		else {
-			std::cout << "\Could not open file: " << file_name << std::endl;
+			std::cout << "Could not open file: " << file_name << std::endl;
 			char cont = 0;
 			std::cin >> cont;
 		}

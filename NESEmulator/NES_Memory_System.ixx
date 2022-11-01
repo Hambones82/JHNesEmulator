@@ -8,6 +8,7 @@ module;
 #include<iomanip>
 
 export module NES_Memory_System;
+
 import PPU;
 import NESIO;
 import CartridgeMem;

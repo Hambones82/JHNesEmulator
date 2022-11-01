@@ -4,11 +4,13 @@ module;
 #include <iostream>
 #include <array>
 
-export module PPU;
 
 class NES_Memory_System;
+export module PPU;
+
 import RenderingWindow;
 //import NES_Memory_System;
+
 
 export class PPU {
 private:
@@ -600,94 +602,6 @@ public:
 		else {
 			col++;
 		}
-		//std::cout << "row: " << row << ", col: " << col << "\n";
-		/*
-		if (col == 0) {
-			
-			current_row_sprite_counter = 0;
-			sprite_0_in_current_row = -1;
-			//evaluate sprites for current row
-			bool sprite_8x16 = PPUregs.PPUFlags.PPUCTRL.Sprite_size;
-			for (int i = 0; i < 64; i++) {
-				if (((OAM.sprites[i].y_pos) <= row) && ((OAM.sprites[i].y_pos) > (row - (sprite_8x16 ? 15 : 8)))) {
-					if (i == 0) { sprite_0_in_current_row = current_row_sprite_counter; }
-					current_row_sprites[current_row_sprite_counter++] = OAM.sprites[i];
-					if (current_row_sprite_counter >= 8) break;
-				}
-			}
-		}
-		*/
-
-
-
-
-		//if ((col < max_draw_col) && (row < max_draw_row) || (row == 261)) {
-			//std::cout << "drawing pixel";
-			/*
-			if (PPUregs.PPUFlags.MASK.Show_background && ((col < max_draw_col) && (row < max_draw_row)) || row == 261) {
-				auto color = GetBGColor();
-				if (row != 261) {
-					renderOut->SetColor(color.r, color.g, color.b, 0);
-					renderOut->DrawPixel(col, row);
-				}
-			}*/
-		
-		//	bool sprite_8x16 = PPUregs.PPUFlags.PPUCTRL.Sprite_size;
-		//	for (int i = 0; i < current_row_sprite_counter; i++) {
-		//		if ((current_row_sprites[i].x_pos > col - 8) &&
-		//			(current_row_sprites[i].x_pos <= col/* << (sprite_8x16 ? 1 : 0)*/)) {
-		/*			uint8_t attr = current_row_sprites[i].attributes & 0x03;
-					bool bottom_tile = (row - current_row_sprites[i].y_pos) >= 8;
-					uint8_t top_tile_num = current_row_sprites[i].tile_index;
-					uint8_t tile_num = (sprite_8x16 && bottom_tile)?top_tile_num+1:top_tile_num;
-
-					uint8_t x_offset = ((col - current_row_sprites[i].x_pos) % 8);
-					if (current_row_sprites[i].attributes & 0b0100'0000) {
-						x_offset = 7 - x_offset;
-					}
-					uint8_t y_offset = (row - current_row_sprites[i].y_pos) % 8;
-					if (current_row_sprites[i].attributes & 0b1000'0000) {
-						y_offset = 7 - y_offset;
-					}
-					uint8_t side = PPUregs.PPUFlags.PPUCTRL.Sprite_size ?
-						current_row_sprites[i].tile_index & 1 :
-						PPUregs.PPUFlags.PPUCTRL.Sprite_pattern_table_address;
-					uint8_t pallette_index = GetPalletteIndex(tile_num, y_offset, x_offset, attr, false, side);
-					if (pallette_index != 0xFF) {
-						auto color = MasterPallette[pallette_index];
-						if (!((current_row_sprites[i].attributes & 0x20) && bg_opaque)) {
-							renderOut->SetColor(color.r, color.g, color.b, 0);
-							renderOut->DrawPixel(col, row);
-						}
-						//std::cout << "sprite 0 in current row " << sprite_0_in_current_row << " row: " << (int)i << "\n";
-						if (bg_opaque && (sprite_0_in_current_row == i)) {
-							//std::cout << "bg_opaque";
-							if (sprite_0_hit == false) {
-								PPUregs.PPUFlags.PPUSTATUS.sprite_0_hit = 1;
-								//std::cout << "sprite 0 hit" << "row: " << row << ", col: " << col << "\n";
-							}
-							sprite_0_hit = true;
-						}
-					}
-				}
-			}
-			//evaluate sprite, etc...
-		}*/
-		/*
-		else if ((row == 241) && (col == 1)) {
-			
-			
-		}
-		else if ((row == 261) && (col == 0)) {
-			//std::cout << "starting frame\n";
-			PPUregs.PPUFlags.PPUSTATUS.vblank_started = 0;//flag of the 2002 register
-			renderOut->StartFrame();
-		}
-		else if ((row == 261) && (col == 1)) {
-			PPUregs.PPUFlags.PPUSTATUS.sprite_0_hit = 0;
-			sprite_0_hit = false;
-		}
-		*/
 	}
 
 	PPU(RenderingWindow *in_renderOut) {

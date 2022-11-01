@@ -214,6 +214,7 @@
     <ClCompile Include="PPU.ixx" />
     <ClCompile Include="RenderingWindow.ixx" />
     <ClCompile Include="RomLoader.ixx" />
+    <ClCompile Include="NESMain.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="AudioFile.h" />
