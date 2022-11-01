@@ -77,5 +77,8 @@
     <ClInclude Include="AudioFile.h">
       <Filter>Source Files</Filter>
     </ClInclude>
+    <ClInclude Include="NESData.h">
+      <Filter>Source Files</Filter>
+    </ClInclude>
   </ItemGroup>
 </Project>
