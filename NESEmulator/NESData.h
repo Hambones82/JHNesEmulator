@@ -17,23 +17,24 @@ private:
 	AudioDriver audioDriver;
 	APU apu;
 	std::thread audio_thread;
-	IMGuiRenderingWindow nesRenderer;
 	PPU ppu;
 	PlatformIO platformIO;
 	NESIO nesIO;
 	NES_Memory_System memory;
 	MasterClock masterClock;
 	NESCPU cpu;
+	IMGuiNES NESGui;
+	IMGuiRenderingWindow nesRenderer;
 public:
 	NESData() : apu(&audioDriver),
-		nesRenderer(),
 		ppu(&nesRenderer),
 		platformIO(),
 		nesIO(&platformIO),
 		memory(&ppu, &nesIO, &apu),
 		masterClock(&ppu, &apu),
 		cpu(&memory, &masterClock),
-		audio_thread(&AudioThread, &audioDriver)
+		audio_thread(&AudioThread, &audioDriver),
+		nesRenderer(&NESGui)
 	{
 
 		ppu.SetMemorySystem(&memory);

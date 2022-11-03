@@ -10,7 +10,7 @@ import NESConstants;
 
 export class IMGuiRenderingWindow {
 private:
-	IMGuiNES imGUINESRenderer;
+	IMGuiNES *imGUINESRenderer;
 
 	SDL_Window* window;
 	SDL_Renderer* renderer;
@@ -42,8 +42,9 @@ private:
 	std::chrono::time_point<std::chrono::system_clock> prev_frame_time;
 	std::chrono::duration<double> frame_time{ 1. / (FPS * RUNTIME_SPEED_MULTIPLIER) };
 public:
-	IMGuiRenderingWindow()
+	IMGuiRenderingWindow(IMGuiNES* in_imGUINESRenderer)
 	{
+		imGUINESRenderer = in_imGUINESRenderer;
 		SDL_SetHint(SDL_HINT_RENDER_SCALE_QUALITY, "2");
 		//SDL_CreateWindowAndRenderer(window_width * scale_factor, window_height * scale_factor, SDL_WINDOW_SHOWN, &window, &renderer);
 		// Setup window
@@ -57,7 +58,7 @@ public:
 			return;
 		}
 
-		imGUINESRenderer.IMGuiInitialize(window, renderer);
+		imGUINESRenderer->IMGuiInitialize(window, renderer);
 
 		//not sure about the next line -- i think they are needed as the output texture to show as an image...
 		renderTexture = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_RGB888, SDL_TEXTUREACCESS_STREAMING, window_width, window_height);
@@ -86,7 +87,7 @@ public:
 		SDL_UnlockTexture(renderTexture);
 
 
-		imGUINESRenderer.DrawNESIMGui(renderTexture);
+		imGUINESRenderer->DrawNESIMGui(renderTexture);
 		//SDL_RenderCopy(renderer, renderTexture, NULL, NULL);
 		//SDL_RenderPresent(renderer);
 		//timing
