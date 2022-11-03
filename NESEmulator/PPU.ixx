@@ -8,14 +8,12 @@ module;
 class NES_Memory_System;
 export module PPU;
 
-import RenderingWindow;
-//import NES_Memory_System;
-
+import IMGuiRenderingWindow;
 
 export class PPU {
 private:
 	NES_Memory_System* memory_system;
-	RenderingWindow* renderOut;
+	IMGuiRenderingWindow* renderOut;
 	int row = 0;
 	int col = 0;
 	int frame = 0;
@@ -296,10 +294,8 @@ private:
 		}
 		else if (cycle == 0) {
 			if (col == 256) {
-				//std::cout << "vert inc\n";
 				IncrementVertical();
 			}
-			//std::cout << "hor inc\n";
 			IncrementHorizontal();
 		}
 	}
@@ -519,13 +515,10 @@ private:
 
 public:
 	void Tick() {
-		//std::cout << "row: " << row << "col: " << col << "\n";
 		if ((row >= 0 && row <= 239) || row == 261) {
 			if (row == 261) {
 				//clear vbl flag and sprite overflow
 				if (col == 2) {
-					//pixelIndex = 0;//lame
-					//std::cout << "clearing flags\n";
 					PPUregs.PPUFlags.PPUSTATUS.sprite_0_hit = 0;
 					PPUregs.PPUFlags.PPUSTATUS.sprite_overflow = 0;
 					PPUregs.PPUFlags.PPUSTATUS.vblank_started = 0;
@@ -568,7 +561,6 @@ public:
 					}
 				}
 				FetchTiles();
-
 			}
 
 		}
@@ -584,8 +576,7 @@ public:
 
 				//flag for nmi
 				if (PPUregs.PPUFlags.PPUCTRL.Generate_NMI) {
-					//std::cout << "set flag";
-					nmi_occurred = true; //?
+					nmi_occurred = true; 
 				}
 			}
 		}
@@ -604,7 +595,7 @@ public:
 		}
 	}
 
-	PPU(RenderingWindow *in_renderOut) {
+	PPU(IMGuiRenderingWindow *in_renderOut) {
 		renderOut = in_renderOut;
 	}
 	void SetMemorySystem(NES_Memory_System* in_memory_system) {

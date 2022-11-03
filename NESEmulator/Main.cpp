@@ -18,9 +18,7 @@ int main(int argc, char* args[])
 	NESData nesData;
 	
 	while (true) {
-		SDL_Event event;
-		while (SDL_PollEvent(&event)) {  // poll until all events are handled!
-		}
+		
 		nesData.AdvanceCPU();
 	}
 	

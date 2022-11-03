@@ -72,12 +72,63 @@
     <ClCompile Include="NESMain.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="IMGui\imgui.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="IMGui\imgui_demo.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="IMGui\imgui_draw.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="IMGui\imgui_tables.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="IMGui\imgui_widgets.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="IMGui\imgui_impl_sdl.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="IMGui\imgui_impl_sdlrenderer.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="IMGuiRenderingWindow.ixx">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="AudioFile.h">
       <Filter>Source Files</Filter>
     </ClInclude>
     <ClInclude Include="NESData.h">
+      <Filter>Source Files</Filter>
+    </ClInclude>
+    <ClInclude Include="IMGuiNES.h">
+      <Filter>Source Files</Filter>
+    </ClInclude>
+    <ClInclude Include="IMGui\imconfig.h">
+      <Filter>Source Files</Filter>
+    </ClInclude>
+    <ClInclude Include="IMGui\imgui.h">
+      <Filter>Source Files</Filter>
+    </ClInclude>
+    <ClInclude Include="IMGui\imgui_internal.h">
+      <Filter>Source Files</Filter>
+    </ClInclude>
+    <ClInclude Include="IMGui\imstb_rectpack.h">
+      <Filter>Source Files</Filter>
+    </ClInclude>
+    <ClInclude Include="IMGui\imstb_textedit.h">
+      <Filter>Source Files</Filter>
+    </ClInclude>
+    <ClInclude Include="IMGui\imstb_truetype.h">
+      <Filter>Source Files</Filter>
+    </ClInclude>
+    <ClInclude Include="IMGui\imgui_impl_sdl.h">
+      <Filter>Source Files</Filter>
+    </ClInclude>
+    <ClInclude Include="IMGui\imgui_impl_sdlrenderer.h">
       <Filter>Source Files</Filter>
     </ClInclude>
   </ItemGroup>

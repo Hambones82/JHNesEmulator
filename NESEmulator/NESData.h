@@ -1,7 +1,7 @@
 #pragma once
 #include <thread>
 
-import RenderingWindow;
+import IMGuiRenderingWindow;
 import NES_Memory_System;
 import PPU;
 import NESCPU;
@@ -17,7 +17,7 @@ private:
 	AudioDriver audioDriver;
 	APU apu;
 	std::thread audio_thread;
-	RenderingWindow nesRenderer;
+	IMGuiRenderingWindow nesRenderer;
 	PPU ppu;
 	PlatformIO platformIO;
 	NESIO nesIO;
