@@ -1,5 +1,6 @@
 #pragma once
 #include <thread>
+#include "IMGuiNES.h"
 
 import IMGuiRenderingWindow;
 import NES_Memory_System;
@@ -34,7 +35,8 @@ public:
 		masterClock(&ppu, &apu),
 		cpu(&memory, &masterClock),
 		audio_thread(&AudioThread, &audioDriver),
-		nesRenderer(&NESGui)
+		nesRenderer(&NESGui),
+		NESGui(audioDriver, apu, cpu)
 	{
 
 		ppu.SetMemorySystem(&memory);

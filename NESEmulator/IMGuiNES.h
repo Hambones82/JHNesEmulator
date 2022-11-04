@@ -14,17 +14,37 @@
 #include "IMGui/imgui_impl_sdlrenderer.h"
 #include <stdio.h>
 #include <SDL.h>
+#include <string>
 
 #if !SDL_VERSION_ATLEAST(2,0,17)
 #error This backend requires SDL 2.0.17+ because of SDL_RenderGeometry() function
 #endif
+
+import AudioDriver;
+import APU;
+import NESCPU;
+import NESCPU_state;
 
 class IMGuiNES {
 private:
     ImVec4 clear_color = ImVec4(0.45f, 0.55f, 0.60f, 1.00f);
     SDL_Window* window;
     SDL_Renderer* renderer;
+
+    //NES internals
+    const AudioDriver& audioDriver;
+    const APU& apu;
+    const NESCPU& cpu;
 public:
+    IMGuiNES(const AudioDriver& in_audioDriver,
+             const APU& in_APU,
+             const NESCPU& in_CPU) :
+        audioDriver(in_audioDriver),
+        apu(in_APU),
+        cpu(in_CPU)
+    {
+
+    }
     void IMGuiInitialize(SDL_Window* in_window, SDL_Renderer* in_renderer) {      
         // Setup SDL
         // (Some versions of SDL before <2.0.10 appears to have performance/stalling issues on a minority of Windows systems,
@@ -129,6 +149,12 @@ public:
         {
             ImGui::Begin("Info");                          // Create a window called "Hello, world!" and append into it.
             ImGui::Text("Application average %.3f ms/frame (%.1f FPS)", 1000.0f / ImGui::GetIO().Framerate, ImGui::GetIO().Framerate);
+            ImGui::Text("Regs");
+            ImGui::Text("X Y A");
+            auto cpuState = cpu.GetStateObj();
+            std::string regValues = "" + std::to_string(cpuState.X) + " "
+                + std::to_string(cpuState.Y) + " " + std::to_string(cpuState.A);
+            ImGui::Text(regValues.c_str());
             ImGui::End();
         }
 

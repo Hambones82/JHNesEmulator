@@ -778,7 +778,7 @@ std::string GetState() {
 		return ss.str();
 	}
 
-NESCPU_state GetStateObj() {
+NESCPU_state GetStateObj() const {
 	NESCPU_state retval;
 	retval.A = regs.A;
 	retval.P = regs.P;

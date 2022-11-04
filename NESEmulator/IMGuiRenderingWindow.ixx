@@ -4,11 +4,12 @@ module;
 #include <SDL_ttf.h>
 #include <chrono>
 #include "IMGuiNES.h"
+#include "NESRenderer.h"
 
 export module IMGuiRenderingWindow;
 import NESConstants;
 
-export class IMGuiRenderingWindow {
+export class IMGuiRenderingWindow : public NESRenderer {
 private:
 	IMGuiNES *imGUINESRenderer;
 

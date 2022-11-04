@@ -131,5 +131,8 @@
     <ClInclude Include="IMGui\imgui_impl_sdlrenderer.h">
       <Filter>Source Files</Filter>
     </ClInclude>
+    <ClInclude Include="NESRenderer.h">
+      <Filter>Source Files</Filter>
+    </ClInclude>
   </ItemGroup>
 </Project>

@@ -3,17 +3,17 @@ module;
 #include <stdint.h>
 #include <iostream>
 #include <array>
-
+#include "NESRenderer.h"
 
 class NES_Memory_System;
 export module PPU;
 
-import IMGuiRenderingWindow;
+//import IMGuiRenderingWindow;
 
 export class PPU {
 private:
 	NES_Memory_System* memory_system;
-	IMGuiRenderingWindow* renderOut;
+	NESRenderer* renderOut;
 	int row = 0;
 	int col = 0;
 	int frame = 0;
@@ -595,7 +595,7 @@ public:
 		}
 	}
 
-	PPU(IMGuiRenderingWindow *in_renderOut) {
+	PPU(NESRenderer *in_renderOut) {
 		renderOut = in_renderOut;
 	}
 	void SetMemorySystem(NES_Memory_System* in_memory_system) {
