@@ -15,6 +15,8 @@
 #include <stdio.h>
 #include <SDL.h>
 #include <string>
+#include <sstream>
+#include <iomanip>
 
 #if !SDL_VERSION_ATLEAST(2,0,17)
 #error This backend requires SDL 2.0.17+ because of SDL_RenderGeometry() function
@@ -150,11 +152,41 @@ public:
             ImGui::Begin("Info");                          // Create a window called "Hello, world!" and append into it.
             ImGui::Text("Application average %.3f ms/frame (%.1f FPS)", 1000.0f / ImGui::GetIO().Framerate, ImGui::GetIO().Framerate);
             ImGui::Text("Regs");
-            ImGui::Text("X Y A");
+            const int strWidth = 6;
+            std::ostringstream labelText;
+            labelText << std::setw(strWidth) << "X"
+                << std::setw(strWidth) << "Y"
+                << std::setw(strWidth) << "A"
+                << std::setw(strWidth) << "PC";
+
+            ImGui::Text(labelText.str().c_str());
             auto cpuState = cpu.GetStateObj();
-            std::string regValues = "" + std::to_string(cpuState.X) + " "
-                + std::to_string(cpuState.Y) + " " + std::to_string(cpuState.A);
-            ImGui::Text(regValues.c_str());
+            std::ostringstream regValues;
+            regValues << std::setw(strWidth) << std::to_string(cpuState.X)
+                << std::setw(strWidth) << std::to_string(cpuState.Y)
+                << std::setw(strWidth) << std::to_string(cpuState.A)
+                << std::setw(strWidth) << std::to_string(cpuState.PC);
+            ImGui::Text(regValues.str().c_str());
+
+            std::ostringstream square1Length;
+            ImGui::Text("APU");
+            ImGui::Text("Square 1");
+            ImGui::Text("Length:");
+            square1Length << std::setw(strWidth) << std::to_string(apu.GetAPUData().square1Data.length_counter);
+            ImGui::Text(square1Length.str().c_str());
+
+            std::ostringstream square2Length;
+            ImGui::Text("Square 2");
+            ImGui::Text("Length:");
+            square2Length << std::setw(strWidth) << std::to_string(apu.GetAPUData().square2Data.length_counter);
+            ImGui::Text(square2Length.str().c_str());
+
+            std::ostringstream triangleLength;
+            ImGui::Text("Triangle");
+            ImGui::Text("Length:");
+            triangleLength << std::setw(strWidth) << std::to_string(apu.GetAPUData().triangleData.length_counter);
+            ImGui::Text(triangleLength.str().c_str());
+
             ImGui::End();
         }
 

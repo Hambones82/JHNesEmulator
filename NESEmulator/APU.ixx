@@ -389,6 +389,9 @@ public:
 	APU(AudioDriver *in_audioDriver) {
 		audioDriver = in_audioDriver;
 	}
+	const APUData& GetAPUData() const {
+		return apuData;
+	}
 	void Tick() {
 		apuData.APUcycles += .5;
 		switch (apuData.mode) {
